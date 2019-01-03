@@ -1,0 +1,15 @@
+name = "PlasmoSolverInterface"
+uuid = "83edbe24-0f7d-11e9-29b5-650131f0fb2d"
+authors = ["Jordan Jalving <jhjalving@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+MathProgBase = "fdba3010-5040-5b88-9595-932c9decdf73"
+Plasmo = "f50dfaa0-7e7a-5c5d-8a42-329bfcc58161"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
