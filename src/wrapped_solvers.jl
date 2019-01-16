@@ -14,13 +14,15 @@ function PipsSolver(;n_workers = 1,master = 0,children = nothing,partitions = Ve
 end
 
 function Plasmo.solve(graph::ModelGraph,solver::PipsSolver)
+    #TODO Might make more sense to directly look up the pips library environment variable
     !isempty(Libdl.find_library("libparpipsnlp")) || error("Could not find a PIPS-NLP installation")
 
     #If we partition
     #NOTE Might make more sense to move the creation of the PIPS structure to pipsnlpsolve
     if !isempty(solver.partition_options[:sub_partitions])
         println("Using partitions for PIPS-NLP")
-        pips_graph = create_pips_tree(graph,solver.partition_options[:sub_partitions];master_partition = solver.partition_options[:master_partition])
+        pips_graph = create_pips_tree(graph,solver.partition_options[:sub_partitions];master_partition = solver.partition_options[:master_partition], lift_link_constraints =
+        solver.options[:lift_link_constraints])
         master = pips_graph.master_node_index
         children = pips_graph.sub_node_indices
     else #just use master and child indices from original graph
