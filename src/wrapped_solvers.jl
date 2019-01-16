@@ -5,9 +5,9 @@ mutable struct PipsSolver <: AbstractPlasmoSolver
     status
 end
 
-function PipsSolver(;n_workers = 1,master = 0,children = nothing,partitions = Vector{Vector{Int64}}(),master_partition = Vector{Int64}())
+function PipsSolver(;n_workers = 1,master = 0,children = nothing,partitions = Vector{Vector{Int64}}(),master_partition = Vector{Int64}(),lift_link_constraints = false)
     solver = PipsSolver(
-    Dict(:n_workers => n_workers,:master => master,:children => children),
+    Dict(:n_workers => n_workers,:master => master,:children => children,:lift_link_constraints => lift_link_constraints),
     Dict(:master_partition => master_partition,:sub_partitions => partitions),
     MPI.MPIManager(np = n_workers),
     nothing)
@@ -17,6 +17,7 @@ function Plasmo.solve(graph::ModelGraph,solver::PipsSolver)
     !isempty(Libdl.find_library("libparpipsnlp")) || error("Could not find a PIPS-NLP installation")
 
     #If we partition
+    #NOTE Might make more sense to move the creation of the PIPS structure to pipsnlpsolve
     if !isempty(solver.partition_options[:sub_partitions])
         println("Using partitions for PIPS-NLP")
         pips_graph = create_pips_tree(graph,solver.partition_options[:sub_partitions];master_partition = solver.partition_options[:master_partition])
