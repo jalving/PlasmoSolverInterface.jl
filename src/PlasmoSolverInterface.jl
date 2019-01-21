@@ -5,7 +5,7 @@ using Libdl
 using MPI
 using Distributed
 
-import Plasmo: solve
+import Plasmo: solve, AbstractPlasmoSolver
 
 export PipsSolver,pipsnlp_solve
 
