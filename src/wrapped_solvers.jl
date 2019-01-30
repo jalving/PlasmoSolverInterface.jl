@@ -42,7 +42,10 @@ function Plasmo.solve(graph::ModelGraph,solver::PipsSolver)
 
     println("Preparing PIPS MPI environment")
     eval(quote @everywhere using Plasmo end)
-    eval(quote @everywhere using PlasmoSolverInterface.PlasmoPipsNlpInterface end)
+    eval(quote @everywhere using PlasmoSolverInterface end)
+    #eval(quote @everywhere using PlasmoSolverInterface.PlasmoPipsNlpInterface end)
+
+    println("Finished loading Plasmo on workers")
 
     send_pips_data(manager,pips_graph,master,children)
 
