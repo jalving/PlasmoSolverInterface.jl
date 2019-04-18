@@ -1,13 +1,14 @@
 
-module PlasmoPipsNlpInterface
+module PipsNlpInterface
 
-using MathProgBase.SolverInterface
+#using MathProgBase.SolverInterface
 using SparseArrays
 using LinearAlgebra
 import MPI
 import JuMP
-import Plasmo.PlasmoModelGraph
+#import Plasmo.PlasmoModelGraph
 #import ..PlasmoModelGraph
+import AlgebraicGraphs
 
 include("PipsNlpSolver.jl")
 using .PipsNlpSolver
@@ -66,14 +67,14 @@ function getData(m::JuMP.Model)
     end
 end
 
-function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::Int64,children_indices::Vector{Int64})
-
-    if master_index == 0
-        master_node = PlasmoModelGraph.ModelNode()
-    else
-        master_node = PlasmoModelGraph.getnode(graph,master_index)
-    end
-    children_nodes = [PlasmoModelGraph.getnode(graph,c_index) for c_index in children_indices]
+# function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::Int64,children_indices::Vector{Int64})
+function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraints are first stage
+    # if master_index == 0
+    #     master_node = PlasmoModelGraph.ModelNode()
+    # else
+    #     master_node = PlasmoModelGraph.getnode(graph,master_index)
+    # end
+    # children_nodes = [PlasmoModelGraph.getnode(graph,c_index) for c_index in children_indices]
 
     #need to check that the structure makes sense
     submodels = [PlasmoModelGraph.getmodel(child) for child in children_nodes]
@@ -91,7 +92,10 @@ function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::
     master_linear_lb = []
     master_linear_ub = []
 
-    linkconstraints = PlasmoModelGraph.getlinkconstraints(graph) #get all of the link constraints in the graph
+
+    #TODO: get_all_linkconstraints.  We don't support subgraphs for this solver.
+    linkconstraints = getlinkconstraints(graph) #get all of the link constraints in the graph
+
     #get arrays of lower and upper bounds for each link constraint
     for con in linkconstraints
         push!(master_linear_lb,con.lb)
@@ -463,33 +467,33 @@ function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::
 
 
     function str_eval_grad_f(rowid,colid,x0,x1,new_grad_f)
-    node = modelList[rowid+1]
-    if rowid == colid
-        local_data = getData(node)
-        local_d = getData(node).d
-        if colid ==  0
-            local_x = x0
+        node = modelList[rowid+1]
+        if rowid == colid
+            local_data = getData(node)
+            local_d = getData(node).d
+            if colid ==  0
+                local_x = x0
+            else
+                local_x = x1
+            end
+            local_grad_f = Array{Float64}(undef,local_data.n)
+            eval_grad_f(local_d, local_grad_f, local_x)
+            local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+            #scale!(local_grad_f,local_scl)
+            rmul!(local_grad_f,local_scl)
+            original_copy(local_grad_f, new_grad_f)
+        elseif colid == 0
+            new_grad_f[1:end] .= 0
         else
-            local_x = x1
+            @assert(false)
         end
-        local_grad_f = Array{Float64}(undef,local_data.n)
-        eval_grad_f(local_d, local_grad_f, local_x)
-        local_scl = (node.objSense == :Min) ? 1.0 : -1.0
-        #scale!(local_grad_f,local_scl)
-        rmul!(local_grad_f,local_scl)
-        original_copy(local_grad_f, new_grad_f)
-    elseif colid == 0
-        new_grad_f[1:end] .= 0
-    else
-        @assert(false)
-    end
-    return Int32(1)
+        return Int32(1)
     end
 
     function array_copy(src,dest)
         @assert(length(src)==length(dest))
         for i in 1:length(src)
-            dest[i] = src[i]-1
+            dest[i] = src[i]-1  #NOTE: Is this a bug?
         end
     end
 
@@ -662,8 +666,7 @@ function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::
     end
 
     #Create FakeModel (The PIPS interface model) and pass all the functions it requires
-    model = FakeModel(:Min,0, scen,
-    str_init_x0, str_prob_info, str_eval_f, str_eval_g, str_eval_grad_f, str_eval_jac_g, str_eval_h,str_write_solution)
+    model = FakeModel(:Min,0, scen,str_init_x0, str_prob_info, str_eval_f, str_eval_g, str_eval_grad_f, str_eval_jac_g, str_eval_h,str_write_solution)
     prob = createProblemStruct(comm, model, true)
     ret = solveProblemStruct(prob)
     root = 0
