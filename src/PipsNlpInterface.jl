@@ -1,13 +1,10 @@
 
 module PipsNlpInterface
 
-#using MathProgBase.SolverInterface
 using SparseArrays
 using LinearAlgebra
 import MPI
 import JuMP
-#import Plasmo.PlasmoModelGraph
-#import ..PlasmoModelGraph
 import AlgebraicGraphs
 
 include("PipsNlpSolver.jl")
@@ -68,20 +65,17 @@ function getData(m::JuMP.Model)
 end
 
 # function pipsnlp_solve(graph::PlasmoModelGraph.AbstractModelGraph,master_index::Int64,children_indices::Vector{Int64})
-function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraints are first stage
-    # if master_index == 0
-    #     master_node = PlasmoModelGraph.ModelNode()
-    # else
-    #     master_node = PlasmoModelGraph.getnode(graph,master_index)
-    # end
-    # children_nodes = [PlasmoModelGraph.getnode(graph,c_index) for c_index in children_indices]
+function pipsnlp_solve(graph::ModelGraph,master_index::Int64)
+end
 
-    #need to check that the structure makes sense
-    submodels = [PlasmoModelGraph.getmodel(child) for child in children_nodes]
+function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraints are first stage
+    #NOTE: Assume no master.  We will use a dummy model for now.  This interface doesn't use shared variables,
+
+    master_node = ModelNode()
+    submodels = [getmodel(node) for node in getnodes(graph)]
     scen = length(children_nodes)
     #############################
-
-    master = PlasmoModelGraph.getmodel(master_node)
+    master = getmodel(master_node)
     modelList = [master; submodels]
 
     #Add ModelData to each model
@@ -89,145 +83,80 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         node.ext[:Data] = ModelData()
     end
 
-    master_linear_lb = []
-    master_linear_ub = []
+    #master (link) constraint upper and lower bounds
+    # master_linear_lb = []
+    # master_linear_ub = []
 
 
     #TODO: get_all_linkconstraints.  We don't support subgraphs for this solver.
     linkconstraints = getlinkconstraints(graph) #get all of the link constraints in the graph
 
     #get arrays of lower and upper bounds for each link constraint
-    for con in linkconstraints
-        push!(master_linear_lb,con.lb)
-        push!(master_linear_ub,con.ub)
-    end
+    # for con in linkconstraints
+    #     push!(master_linear_lb,con.lb)
+    #     push!(master_linear_ub,con.ub)
+    # end
 
-    nlinkeq = 0
-    nlinkineq = 0
-    eqlink_lb = Float64[]
+    #Store data about links
+    nlinkeq = 0                 #Link constraint equalities
+    nlinkineq = 0               #Link constraint inequalities
+    eqlink_lb = Float64[]       #
     eqlink_ub = Float64[]
     ineqlink_lb = Float64[]
     ineqlink_ub = Float64[]
 
     #go through the link constraints
-    for c in 1:length(linkconstraints)
-        coeffs = linkconstraints[c].terms.coeffs
-        vars   = linkconstraints[c].terms.vars
-        connect = false     #the constraint connects a single node to the master
-        allconnect = false  #the constraint connects subproblems to eachother
-        node = nothing
-
-		for (it,ind) in enumerate(coeffs)              #for each coefficient in the constraint
-            #if the constraint has a variable from a sub-node
-            if (!connect) && (vars[it].m) != master    #if the variable isn't in the master model
-                connect = true
-                node = vars[it].m                      #the submodel
-		    end
-            #if the constraint actually involved multiple nodes
-		    if connect && (vars[it].m != master) && (vars[it].m != node)
-		       allconnect = true
-		       break  #don't need to check every variable if this statement runs
-		    end
-	    end
-
-    	if (connect) && (!allconnect)   #if there's a master child connection only
-            # println("Simple Links")
-            # println(node.ext)
-    	    local_data = getData(node)
-    		if master_linear_lb[c] == master_linear_ub[c]  #if it's an equality constraint
-                firstIeq = local_data.firstIeq
-                firstJeq = local_data.firstJeq
-                firstVeq = local_data.firstVeq
-                secondIeq = local_data.secondIeq
-                secondJeq = local_data.secondJeq
-                secondVeq = local_data.secondVeq
-                push!(local_data.eqconnect_lb, master_linear_lb[c])
-                push!(local_data.eqconnect_ub, master_linear_ub[c])
-                local_data.num_eqconnect += 1
-                row = local_data.num_eqconnect
-                for (it,ind) in enumerate(coeffs)
-                    if (vars[it].m) == master
-                           	  push!(firstIeq, row)
-                          	  push!(firstJeq, vars[it].col)
-                          	  push!(firstVeq, ind)
-                    elseif (vars[it].m) == node
-                           	  push!(secondIeq, row)
-                          	  push!(secondJeq, vars[it].col)
-                          	  push!(secondVeq, ind)
-                    else
-                      error("only supports connection between first stage variables and second stage variables from one specific scenario")
-                    end
-                end
-    		else
-                firstIineq = local_data.firstIineq
-                firstJineq = local_data.firstJineq
-                firstVineq = local_data.firstVineq
-                secondIineq = local_data.secondIineq
-                secondJineq = local_data.secondJineq
-                secondVineq = local_data.secondVineq
-
-                push!(local_data.ineqconnect_lb, master_linear_lb[c])
-                push!(local_data.ineqconnect_ub, master_linear_ub[c])
-
-                local_data.num_ineqconnect += 1
-                row = local_data.num_ineqconnect
-                for (it,ind) in enumerate(coeffs)
-                    if (vars[it].m) == master
-                        push!(firstIineq, row)
-                        push!(firstJineq, vars[it].col)
-                        push!(firstVineq, ind)
-                    elseif (vars[it].m) == node
-                        push!(secondIineq, row)
-                        push!(secondJineq, vars[it].col)
-                        push!(secondVineq, ind)
-                    else
-                        error("only supports connection between first stage variables and second stage variables from one specific scenario")
-                    end
-                end
-	        end
-	    end
-
-
-	    if (allconnect)
-            if master_linear_lb[c] == master_linear_ub[c]
-                nlinkeq = nlinkeq + 1
-                push!(eqlink_lb, master_linear_lb[c])
-                push!(eqlink_ub, master_linear_ub[c])
-                row = nlinkeq
-                for (it,ind) in enumerate(coeffs)
-                    node = vars[it].m
-                    # println("Linking constraint")
-                    # println(node.ext)
-                    # println("Check model list again")
-                    # println(modelList[1].ext)
-                    local_data = getData(node)
-                    linkIeq = local_data.linkIeq
-                    linkJeq = local_data.linkJeq
-                    linkVeq = local_data.linkVeq
-                    push!(linkIeq, row)
-                    push!(linkJeq, vars[it].col)
-                    push!(linkVeq, ind)
-                end
-            else
+    for link in linkconstraints
+        # coeffs = link.func.terms.vals
+        # vars = link.func.terms.keys
+	    #LINKCONSTRAINTS BETWEEN SUBPROBLEMS
+        if isa(link.set,MOI.EqualTo)  #EQUALITY CONSTRAINTS
+            nlinkeq = nlinkeq + 1
+            push!(eqlink_lb, link.set.value)#master_linear_lb[c])
+            push!(eqlink_ub, link.set.value)#master_linear_ub[c])
+            row = nlinkeq
+            for (var,coeff) in link.func.terms
+                node = var.model
+                local_data = getData(node)
+                linkIeq = local_data.linkIeq
+                linkJeq = local_data.linkJeq
+                linkVeq = local_data.linkVeq
+                push!(linkIeq, row)             #the variable row
+                push!(linkJeq, var.index.value)    #the variable column
+                push!(linkVeq, coeff)             #the coefficient
+            end
+        else #LOOK FOR INEQUALITY CONSTRAINTS
+            @assert link.set in [MOI.Interval{Float64},MOI.LessThan{Float64},MOI.GreaterThan{Float64}]
+            if isa(link.set,MOI.LessThan)
                 nlinkineq = nlinkineq + 1
-                push!(ineqlink_lb, master_linear_lb[c])
-                push!(ineqlink_ub, master_linear_ub[c])
+                push!(ineqlink_lb, -Inf)
+                push!(ineqlink_ub, link.set.upper)
                 row = nlinkineq
-                for (it,ind) in enumerate(coeffs)
-                    node = vars[it].m
-                    local_data = getData(node)
-                    linkIineq = local_data.linkIineq
-                    linkJineq = local_data.linkJineq
-                    linkVineq = local_data.linkVineq
-                    push!(linkIineq, row)
-                    push!(linkJineq, vars[it].col)
-                    push!(linkVineq, ind)
-                end
+            elseif isa(link.set,MOI.GreaterThan)
+                nlinkineq = nlinkineq + 1
+                push!(ineqlink_lb, link.set.lower)
+                push!(ineqlink_ub, Inf)
+                row = nlinkineq
+            elseif isa(link.set,MOI.Interval)
+                nlinkineq = nlinkineq + 1
+                push!(ineqlink_lb, link.set.lower)
+                push!(ineqlink_ub, link.set.upper)
+                row = nlinkineq
+            end
+            #Populate Connection Matrix
+            for (var,coeff) in link.func.terms
+                node = var.model
+                local_data = getData(node)
+                linkIineq = local_data.linkIineq
+                linkJineq = local_data.linkJineq
+                linkVineq = local_data.linkVineq
+                push!(linkIineq, row)
+                push!(linkJineq, var.index.value)
+                push!(linkVineq, coeff)
             end
         end
     end
-    #removeConnection(master, connectid)  #removes the linear constraints from the master model.  I don't add these to the master anyways
-    master_data = getData(master)  #this isn't used anywhere?
+    master_data = getData(master)
 
     if haskey(master.ext, :nlinkeq)
         nlinkeq =  master.ext[:nlinkeq]
