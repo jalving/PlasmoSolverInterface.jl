@@ -210,6 +210,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
 
+    #TODO: Test this works
     function str_init_x0(nodeid, x0)
         node = modelList[nodeid+1]
         #NOTE: colVal is not an attribute anymore
@@ -218,7 +219,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         #if any(isnan,node.colVal)
         if any(isa(local_initval,Nothing))
             #set initial values
-            local_initval[isnan.(local_initval)] .= 1
+            local_initval[isnan.(local_initval)] .= 1  #set to 1 by default
             #local_initval[isnan.(node.colVal)] .= 0
             #local_initval = min.(max.(node.colLower,local_initval),node.colUpper)
         end
@@ -245,7 +246,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             	end
 
     			nlp_lb, nlp_ub = JuMP.constraintbounds(node)  #This is every constraint in the model
-         		local_data.local_m  = length(nlp_lb)          #number of local constraints
+         		local_data.local_m  = length(nlp_lb)          #number of local constraints (rows)
 
     			newRowId = Array{Int}(undef,local_data.local_m)
     			eqId = 1
@@ -410,9 +411,12 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
         #NOTE: This won't work anymore
         if id == 0
-            node.objVal = str_eval_f(id, x, nothing)
+            #Add objective value to node
+            #node.objVal = str_eval_f(id, x, nothing)
+            node.ext[:objective] = str_eval_f(id, x, nothing)
         else
-            node.objVal = str_eval_f(id, nothing, x)
+            #node.objVal = str_eval_f(id, nothing, x)
+            node.ext[:objective] = str_eval_f(id, nothing, x)
         end
         r = MPI.Comm_rank(comm)
         local_data.coreid = r
@@ -814,6 +818,23 @@ end
 
 #TODO
 function constraintbounds(m::JuMP.Model)
+    #Setup indices.  Get number of constraints
+    constraint_upper = []
+    constraint_lower = []
+    constraint_types = JuMP.list_of_constraint_types(node_model)
+    for (func,set) in constraint_types
+        if func != JuMP.VariableRef
+            constraint_refs = JuMP.all_constraints(m, func, set)
+            for constraint_ref in constraint_refs
+                constraint = JuMP.constraint_object(constraint_ref)
+
+
+end
+
+function variableupperbounds(m::JuMP.Model)
+end
+
+function variablelowerbounds(m::JuMP.Model)
 end
 
 end #end module

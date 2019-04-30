@@ -5,7 +5,7 @@
 # Wrapper for the parallel/structured PIPS-NLP interface
 module PipsNlpSolver
 import MPI
-using Compat
+#using Compat
 using Libdl
 
 try
@@ -21,7 +21,7 @@ catch
   warn("Could not load PIPS-NLP shared library. Make sure the ENV variable 'PIPS_NLP_PAR_SHARED_LIB' points to its location, usually in the PIPS repo at PIPS/build_pips/PIPS-NLP/libparpipsnlp.so")
   rethrow()
 end
-@compat abstract type ModelInterface end
+abstract type ModelInterface end
 #######################
 mutable struct FakeModel <: ModelInterface
     sense::Symbol
