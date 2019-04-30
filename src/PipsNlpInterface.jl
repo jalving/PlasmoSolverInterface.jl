@@ -6,6 +6,8 @@ using LinearAlgebra
 import MPI
 import JuMP
 import AlgebraicGraphs
+import MathOptInterface
+const MOI = MathOptInterface
 
 include("PipsNlpSolver.jl")
 using .PipsNlpSolver
@@ -210,21 +212,29 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
     function str_init_x0(nodeid, x0)
         node = modelList[nodeid+1]
-        local_initval = copy(node.colVal)
-        if any(isnan,node.colVal)
-            local_initval[isnan.(node.colVal)] .= 0
-            local_initval = min.(max.(node.colLower,local_initval),node.colUpper)
+        #NOTE: colVal is not an attribute anymore
+        #local_initval = copy(node.colVal)
+        local_initval = copy(JuMP.initial_value.(JuMP.all_variables(node)))
+        #if any(isnan,node.colVal)
+        if any(isa(local_initval,Nothing))
+            #set initial values
+            local_initval[isnan.(local_initval)] .= 1
+            #local_initval[isnan.(node.colVal)] .= 0
+            #local_initval = min.(max.(node.colLower,local_initval),node.colUpper)
         end
         original_copy(local_initval,x0)
     end
 
 
+    #TODO Update to JuMP 0.19 and MOI.
+    #TODO Replace JuMP.constraintbounds
+    #NOTE: What does mode mean?
     function str_prob_info(nodeid,flag, mode,col_lb,col_ub,row_lb,row_ub)
-	 	#comm = MPI.COMM_WORLD
         if flag != 1
             node = modelList[nodeid+1]
             local_data = getData(node)
-            if(!local_data.loaded)
+            #Do a warm start on the node
+            if !(local_data.loaded)
                 local_data.loaded = true
                 if (nodeid > 0)
                     if haskey(node.ext, :warmStart)
@@ -234,12 +244,14 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                     end
             	end
 
-    			nlp_lb, nlp_ub = JuMP.constraintbounds(node)
-         		local_data.local_m  = length(nlp_lb)
+    			nlp_lb, nlp_ub = JuMP.constraintbounds(node)  #This is every constraint in the model
+         		local_data.local_m  = length(nlp_lb)          #number of local constraints
 
     			newRowId = Array{Int}(undef,local_data.local_m)
     			eqId = 1
     			ineqId = 1
+
+                #Go through all constraints, check if they are equality of inequality
                 for c in 1:local_data.local_m
                     if nlp_lb[c] == nlp_ub[c]
                         push!(local_data.eq_idx, c)
@@ -251,6 +263,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         				ineqId += 1
                     end
          		end
+
+                #Local node data
                 local_data.m  = local_data.local_m + local_data.num_eqconnect + local_data.num_ineqconnect
                 local_data.n = node.numCols
                 local_data.x_sol = zeros(Float64,local_data.n)
@@ -260,8 +274,9 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                 local_data.secondJineqmat = sparse(local_data.secondIineq, local_data.secondJineq, local_data.secondVineq, local_data.num_ineqconnect, local_data.n)
 
                 local_data.d = JuMP.NLPEvaluator(node)
-                initialize(local_data.d, [:Grad,:Jac, :Hess])
-                Ijac, Jjac = jac_structure(local_data.d)
+                MOI.initialize(local_data.d, [:Grad,:Jac, :Hess])
+                #Ijac, Jjac = jac_structure(local_data.d)
+                Ijac, Jjac = MOI.jacobian_structure(local_data.d)
                 Ijaceq = Int[]
                 Jjaceq = Int[]
                 Ijacineq = Int[]
@@ -289,7 +304,9 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
          		node.ext[:Jjacineq] = Jjacineq
          		node.ext[:jac_eq_index] = jac_eq_index
          		node.ext[:jac_ineq_index] = jac_ineq_index
-         		Ihess, Jhess = hesslag_structure(local_data.d)
+         		#Ihess, Jhess = hesslag_structure(local_data.d)
+                Ihess, Jhess = MOI.hessian_lagrangian_structure(local_data.d)
+
 
          		Hmap = Bool[]
          		node_Hrows = Int[]
@@ -313,7 +330,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
          		local_data.hessnnz = local_hessnnz
 		    end
 
-	 	    if(mode == :Values)
+	 	    if mode == :Values
                	nlp_lb, nlp_ub = JuMP.constraintbounds(node)
     			eq_lb=Float64[]
     			eq_ub=Float64[]
@@ -329,7 +346,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     			    end
     			end
 
-    			if nodeid !=  0
+    			if nodeid !=  0 #0 is the master
     			   eq_lb = [eq_lb; local_data.eqconnect_lb]
     			   eq_ub = [eq_ub; local_data.eqconnect_ub]
     			   ineq_lb = [ineq_lb; local_data.ineqconnect_lb]
@@ -343,7 +360,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             end
 		    return (local_data.n,local_data.m)
 		else
-		    if(mode == :Values)
+		    if mode == :Values
                 original_copy([eqlink_lb; ineqlink_lb], row_lb)
                 original_copy([eqlink_ub; ineqlink_ub], row_ub)
             end
@@ -351,8 +368,9 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 		end
     end
 
+    #x0 is first stage variable values, x1 is local values
     function str_eval_f(nodeid,x0,x1)
-    	node = modelList[nodeid+1]
+    	node = modelList[nodeid+1] #Julia doesn't start index at 0
         local_data = getData(node)
         local_d = getData(node).d
         if nodeid ==  0
@@ -360,8 +378,11 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         else
             local_x = x1
         end
-        local_scl = (node.objSense == :Min) ? 1.0 : -1.0
-        f = local_scl*eval_f(local_d,local_x)
+        #check objective sign
+        #local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+        local_scl = (JuMP.objective_sense(node) == MOI.MAX_SENSE) ? -1.0 : 1.0
+        #f = local_scl*eval_f(local_d,local_x)
+        f = local_scl*MOI.eval_objective(local_d,local_x)
         return f
     end
 
@@ -375,7 +396,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             local_x = x1
         end
         local_g = Array{Float64}(undef,local_data.local_m)
-        eval_g(local_d, local_g, local_x)
+        #eval_g(local_d, local_g, local_x)
+        MOI.eval_constraint(local_d, local_g, local_x)
         new_eq_g[1:end] = [local_g[local_data.eq_idx]; local_data.firstJeqmat*x0+local_data.secondJeqmat*x1]
         new_inq_g[1:end] = [local_g[local_data.ineq_idx]; local_data.firstJineqmat*x0+local_data.secondJineqmat*x1]
 	    return Int32(1)
@@ -385,6 +407,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         node = modelList[id+1]
         local_data = getData(node)
         local_data.x_sol = copy(x)
+
+        #NOTE: This won't work anymore
         if id == 0
             node.objVal = str_eval_f(id, x, nothing)
         else
@@ -406,8 +430,10 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                 local_x = x1
             end
             local_grad_f = Array{Float64}(undef,local_data.n)
-            eval_grad_f(local_d, local_grad_f, local_x)
-            local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+            MOI.eval_objective_gradient(local_d, local_grad_f, local_x)
+            #eval_grad_f(local_d, local_grad_f, local_x)
+            #local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+            local_scl = (JuMP.objective_sense(node) == MOI.MAX_SENSE) ? -1.0 : 1.0
             #scale!(local_grad_f,local_scl)
             rmul!(local_grad_f,local_scl)
             original_copy(local_grad_f, new_grad_f)
@@ -419,6 +445,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         return Int32(1)
     end
 
+    #NOTE: Why does it subtract 1?
     function array_copy(src,dest)
         @assert(length(src)==length(dest))
         for i in 1:length(src)
@@ -462,7 +489,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                         local_x = x1
                     end
                     local_values = Array{Float64}(undef,length(node.ext[:Ijaceq])+length(node.ext[:Ijacineq]))
-                    eval_jac_g(local_data.d, local_values, local_x)
+                    #eval_jac_g(local_data.d, local_values, local_x)
+                    MOI.eval_constraint_jacobian(local_data.d, local_values, local_x)
                     jac_eq_index = node.ext[:jac_eq_index]
                     jac_ineq_index = node.ext[:jac_ineq_index]
                     Ieq=[node.ext[:Ijaceq];local_data.secondIeq .+ local_m_eq]
@@ -550,7 +578,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                 end
                 local_unsym_values = Array{Float64}(undef,local_data.local_unsym_hessnnz)
                 node_val = ones(Float64,length(node_Hrows))
-                local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+                #local_scl = (node.objSense == :Min) ? 1.0 : -1.0
+                local_scl = (JuMP.objective_sense(node) == MOI.MAX_SENSE) ? -1.0 : 1.0
                 local_m_eq = length(local_data.eq_idx)
                 local_m_ineq = length(local_data.ineq_idx)
                 local_lambda = zeros(Float64, local_data.local_m)
@@ -561,7 +590,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                     local_lambda[local_data.ineq_idx[i]] = lambda[i+local_m_eq]
                 end
 
-                eval_hesslag(local_data.d, local_unsym_values, local_x, obj_factor*local_scl, local_lambda)
+                #eval_hesslag(local_data.d, local_unsym_values, local_x, obj_factor*local_scl, local_lambda)
+                MOI.eval_hessian_lagrangian(local_data.d, local_unsym_values, local_x, obj_factor*local_scl, local_lambda)
                 local_sym_index=1
                 for i in 1:local_data.local_unsym_hessnnz
                     if node_Hmap[i]
@@ -780,6 +810,10 @@ function convert_to_c_idx(indicies)
     for i in 1:length(indicies)
         indicies[i] = indicies[i] - 1
     end
+end
+
+#TODO
+function constraintbounds(m::JuMP.Model)
 end
 
 end #end module
