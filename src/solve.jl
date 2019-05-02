@@ -13,7 +13,7 @@ function PipsSolver(;n_workers = 1,master = 0,children = nothing,partitions = Ve
     nothing)
 end
 
-function Plasmo.solve(graph::ModelGraph,solver::PipsSolver)
+function JuMP.optimize!(graph::ModelGraph,solver::PipsSolver)
     #TODO Might make more sense to directly look up the pips library environment variable
     !isempty(Libdl.find_library("libparpipsnlp")) || error("Could not find a PIPS-NLP installation")
 
@@ -50,7 +50,7 @@ function Plasmo.solve(graph::ModelGraph,solver::PipsSolver)
     send_pips_data(manager,pips_graph,master,children)
 
     println("Solving with PIPS-NLP")
-    #NOTE Might need to do status = pipsnlp_solve
+    #NOTE Need to get status = pipsnlp_solve
     MPI.@mpi_do manager pipsnlp_solve(pips_graph,master,children)
 
     #Get solution

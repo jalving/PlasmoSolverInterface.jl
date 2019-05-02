@@ -1,15 +1,15 @@
-
 module PipsNlpInterface
 
 using SparseArrays
 using LinearAlgebra
 import MPI
 import JuMP
-import AlgebraicGraphs
+using AlgebraicGraphs
 import MathOptInterface
 const MOI = MathOptInterface
 
 include("PipsNlpSolver.jl")
+include("helpers.jl")
 using .PipsNlpSolver
 export pipsnlp_solve
 
@@ -71,8 +71,7 @@ function pipsnlp_solve(graph::ModelGraph,master_index::Int64)
 end
 
 function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraints are first stage
-    #NOTE: Assume no master.  We will use a dummy model for now.  This interface doesn't use shared variables,
-
+    #NOTE: Assume no master model if not given a master index.  We will create a dummy model
     master_node = ModelNode()
     submodels = [getmodel(node) for node in getnodes(graph)]
     scen = length(children_nodes)
@@ -245,7 +244,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                     end
             	end
 
-    			nlp_lb, nlp_ub = JuMP.constraintbounds(node)  #This is every constraint in the model
+    			#nlp_lb, nlp_ub = JuMP.constraintbounds(node)  #This is every constraint in the model
+                nlp_lb, nlp_ub = constraintbounds(node)  #This is every constraint in the model
          		local_data.local_m  = length(nlp_lb)          #number of local constraints (rows)
 
     			newRowId = Array{Int}(undef,local_data.local_m)
@@ -332,7 +332,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 		    end
 
 	 	    if mode == :Values
-               	nlp_lb, nlp_ub = JuMP.constraintbounds(node)
+               	#nlp_lb, nlp_ub = JuMP.constraintbounds(node)
+                nlp_lb, nlp_ub = constraintbounds(node)
     			eq_lb=Float64[]
     			eq_ub=Float64[]
     			ineq_lb=Float64[]
@@ -356,8 +357,12 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
     			original_copy([eq_lb;ineq_lb], row_lb)
     			original_copy([eq_ub;ineq_ub], row_ub)
-    			original_copy(node.colLower, col_lb)
-    			original_copy(node.colUpper, col_ub)
+                colLower = variablelowerbounds(m)
+                colUpper = variableupperbounds(m)
+    			# original_copy(node.colLower, col_lb)
+    			# original_copy(node.colUpper, col_ub)
+                original_copy(colLower, col_lb)
+    			original_copy(colUpper, col_ub)
             end
 		    return (local_data.n,local_data.m)
 		else
@@ -453,7 +458,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     function array_copy(src,dest)
         @assert(length(src)==length(dest))
         for i in 1:length(src)
-            dest[i] = src[i]-1  #NOTE: Is this a bug?
+            dest[i] = src[i]-1  #NOTE: Is this copying indices to a C vector?
         end
     end
 
@@ -635,7 +640,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     root = 0
     r = MPI.Comm_rank(comm)
 
-    if(MPI.Comm_rank(comm) == 0)
+    if MPI.Comm_rank(comm) == 0
         println("Timing Results:")
         println("init_x0  ",prob.t_jl_init_x0)
         println("str_init_x0  ", prob.t_jl_str_prob_info)
@@ -667,13 +672,14 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                 local_data.x_sol = zeros(Float64,local_data.n)
             end
             MPI.Bcast!(local_data.x_sol, local_data.n, coreid[1], comm)
-            node.colVal = local_data.x_sol
+
+            node.ext[:colVal] = local_data.x_sol
+            #node.colVal = local_data.x_sol
         else
-            node.colVal = local_data.x_sol
+            node.ext[:colVal] = local_data.x_sol
+            #node.colVal = local_data.x_sol
         end
     end
-
-
     status = :Unknown
     if ret == 0
         status = :Optimal
@@ -693,151 +699,4 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     return status
 end  #end pips_nlp_solve
 
-
-#############################################
-# Helpers
-#############################################
-function exchange(a,b)
-	 temp = a
-         a=b
-         b=temp
-	 return (a,b)
-end
-
-function sparseKeepZero(I::AbstractVector{Ti},
-    J::AbstractVector{Ti},
-    V::AbstractVector{Tv},
-    nrow::Integer, ncol::Integer) where {Tv,Ti<:Integer}
-    N = length(I)
-    if N != length(J) || N != length(V)
-        throw(ArgumentError("triplet I,J,V vectors must be the same length"))
-    end
-    if N == 0
-        return spzeros(eltype(V), Ti, nrow, ncol)
-    end
-
-    # Work array
-    Wj = Array{Ti}(undef,max(nrow,ncol)+1)
-    # Allocate sparse matrix data structure
-    # Count entries in each row
-    Rnz = zeros(Ti, nrow+1)
-    Rnz[1] = 1
-    nz = 0
-    for k=1:N
-        iind = I[k]
-        iind > 0 || throw(ArgumentError("all I index values must be > 0"))
-        iind <= nrow || throw(ArgumentError("all I index values must be ≤ the number of rows"))
-        Rnz[iind+1] += 1
-        nz += 1
-    end
-    Rp = cumsum(Rnz)
-    Ri = Array{Ti}(undef,nz)
-    Rx = Array{Tv}(undef,nz)
-
-    # Construct row form
-    # place triplet (i,j,x) in column i of R
-    # Use work array for temporary row pointers
-    @simd for i=1:nrow; @inbounds Wj[i] = Rp[i]; end
-    @inbounds for k=1:N
-        iind = I[k]
-        jind = J[k]
-        jind > 0 || throw(ArgumentError("all J index values must be > 0"))
-        jind <= ncol || throw(ArgumentError("all J index values must be ≤ the number of columns"))
-        p = Wj[iind]
-        Vk = V[k]
-        Wj[iind] += 1
-        Rx[p] = Vk
-        Ri[p] = jind
-    end
-
-    # Reset work array for use in counting duplicates
-    @simd for j=1:ncol; @inbounds Wj[j] = 0; end
-
-    # Sum up duplicates and squeeze
-    anz = 0
-    @inbounds for i=1:nrow
-        p1 = Rp[i]
-        p2 = Rp[i+1] - 1
-        pdest = p1
-        for p = p1:p2
-            j = Ri[p]
-            pj = Wj[j]
-            if pj >= p1
-                Rx[pj] = Rx[pj] + Rx[p]
-            else
-                Wj[j] = pdest
-                if pdest != p
-                    Ri[pdest] = j
-                    Rx[pdest] = Rx[p]
-                end
-                pdest += one(Ti)
-            end
-        end
-        Rnz[i] = pdest - p1
-        anz += (pdest - p1)
-    end
-
-    # Transpose from row format to get the CSC format
-    RiT = Array{Ti}(undef,anz)
-    RxT = Array{Tv}(undef,anz)
-
-    # Reset work array to build the final colptr
-    Wj[1] = 1
-    @simd for i=2:(ncol+1); @inbounds Wj[i] = 0; end
-    @inbounds for j = 1:nrow
-        p1 = Rp[j]
-        p2 = p1 + Rnz[j] - 1
-        for p = p1:p2
-            Wj[Ri[p]+1] += 1
-        end
-    end
-    RpT = cumsum(Wj[1:(ncol+1)])
-
-    # Transpose
-    @simd for i=1:length(RpT); @inbounds Wj[i] = RpT[i]; end
-    @inbounds for j = 1:nrow
-        p1 = Rp[j]
-        p2 = p1 + Rnz[j] - 1
-        for p = p1:p2
-            ind = Ri[p]
-            q = Wj[ind]
-            Wj[ind] += 1
-            RiT[q] = j
-            RxT[q] = Rx[p]
-        end
-    end
-
-    return SparseMatrixCSC(nrow, ncol, RpT, RiT, RxT)
-end
-
-function convert_to_c_idx(indicies)
-    for i in 1:length(indicies)
-        indicies[i] = indicies[i] - 1
-    end
-end
-
-#TODO
-function constraintbounds(m::JuMP.Model)
-    #Setup indices.  Get number of constraints
-    constraint_upper = []
-    constraint_lower = []
-    constraint_types = JuMP.list_of_constraint_types(node_model)
-    for (func,set) in constraint_types
-        if func != JuMP.VariableRef
-            constraint_refs = JuMP.all_constraints(m, func, set)
-            for constraint_ref in constraint_refs
-                constraint = JuMP.constraint_object(constraint_ref)
-
-
-end
-
-function variableupperbounds(m::JuMP.Model)
-end
-
-function variablelowerbounds(m::JuMP.Model)
-end
-
 end #end module
-# function removeConnection(master::JuMP.Model, deleterow)
-#     deleteat!(master.linconstr,deleterow)
-# end

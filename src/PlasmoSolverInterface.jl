@@ -1,18 +1,19 @@
 module PlasmoSolverInterface
 
-using Plasmo
+using AlgebraicGraphs
+using JuMP
 using Libdl
 using MPI
 using Distributed
 
-import Plasmo: solve, AbstractPlasmoSolver
+#import Plasmo: solve, AbstractPlasmoSolver
 
 export PipsSolver,pipsnlp_solve
 
-include("wrapped_solvers.jl")
+#include("solve.jl")
 
-include("plasmoPipsNlpInterface.jl")
+include("PipsNlpInterface.jl")
 
-using .PlasmoPipsNlpInterface
+using .PipsNlpInterface
 
 end # module

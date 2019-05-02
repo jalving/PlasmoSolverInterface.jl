@@ -4,10 +4,13 @@ authors = ["Jordan Jalving <jhjalving@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+AlgebraicGraphs = "7c4945c3-4d72-5fdd-9fe8-d9d2b0887164"
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StructureGraphs = "c006e000-3563-5a1e-ba0f-5b668b07bc1f"
