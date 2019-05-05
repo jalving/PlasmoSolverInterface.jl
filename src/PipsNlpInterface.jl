@@ -72,9 +72,10 @@ end
 
 function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraints are first stage
     #NOTE: Assume no master model if not given a master index.  We will create a dummy model
+    println("Solving with PIPS-NLP")
     master_node = ModelNode()
     submodels = [getmodel(node) for node in getnodes(graph)]
-    scen = length(children_nodes)
+    scen = length(submodels)
     #############################
     master = getmodel(master_node)
     modelList = [master; submodels]
@@ -628,17 +629,27 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         return Int32(1)
     end
 
+    println("test")
+    MPI.Init()
+    println("Loaded Functions")
     comm = MPI.COMM_WORLD
     if(MPI.Comm_rank(comm) == 0)
         t1 = time()
     end
+    println(comm)
+
 
     #Create FakeModel (The PIPS interface model) and pass all the functions it requires
     model = FakeModel(:Min,0, scen,str_init_x0, str_prob_info, str_eval_f, str_eval_g, str_eval_grad_f, str_eval_jac_g, str_eval_h,str_write_solution)
+    println("Created PIPS Model")
     prob = createProblemStruct(comm, model, true)
+
+    println("created problem struct")
     ret = solveProblemStruct(prob)
+    println("solved problem struct")
     root = 0
     r = MPI.Comm_rank(comm)
+
 
     if MPI.Comm_rank(comm) == 0
         println("Timing Results:")
@@ -683,7 +694,6 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     status = :Unknown
     if ret == 0
         status = :Optimal
-        #PlasmoModelGraph._setobjectivevalue(graph,prob.t_jl_eval_f)
     elseif ret == 1
         status = :Not_Finished
     elseif	ret == 2
