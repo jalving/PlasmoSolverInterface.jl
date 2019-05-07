@@ -120,9 +120,7 @@ function convert_to_c_idx(indicies)
     end
 end
 
-
-
-#TODO
+#NOTE: These are helper functions to get data from JuMP models into the PIPS-NLP Interface.
 function numconstraints(m::JuMP.Model)
     num_cons = 0
     constraint_types = JuMP.list_of_constraint_types(m)
@@ -195,7 +193,6 @@ function constraintbounds(m::JuMP.Model)
     return constraint_lower,constraint_upper
 end
 
-
 function variableupperbounds(m::JuMP.Model)
     #Get upper bound variable constraints
     upper_bounds = ones(JuMP.num_variables(m))*Inf #Assume no upper bound by default
@@ -244,4 +241,94 @@ function variablelowerbounds(m::JuMP.Model)
 
     #TODO sort?
     return lower_bounds
+end
+
+function pips_jacobian_structure(m::JuMP.Model)
+end
+
+mutable struct ConstraintData
+    linear_le_constraints::Vector{Tuple{MOI.ScalarAffineFunction{Float64}, MOI.LessThan{Float64}}}
+    linear_ge_constraints::Vector{Tuple{MOI.ScalarAffineFunction{Float64}, MOI.GreaterThan{Float64}}}
+    linear_eq_constraints::Vector{Tuple{MOI.ScalarAffineFunction{Float64}, MOI.EqualTo{Float64}}}
+    quadratic_le_constraints::Vector{Tuple{MOI.ScalarQuadraticFunction{Float64}, MOI.LessThan{Float64}}}
+    quadratic_ge_constraints::Vector{Tuple{MOI.ScalarQuadraticFunction{Float64}, MOI.GreaterThan{Float64}}}
+    quadratic_eq_constraints::Vector{Tuple{MOI.ScalarQuadraticFunction{Float64}, MOI.EqualTo{Float64}}}
+end
+
+ConstraintData() = ConstraintData([], [], [], [], [], [])
+
+function get_constraint_data(m::JuMP.Model)
+	con_data = ConstraintData()
+
+	constraint_types = JuMP.list_of_constraint_types(m)
+
+    for (func,set) in constraint_types
+        if func == JuMP.VariableRef #This is a variable bound, not a PIPS-NLP constraint
+			continue
+		else
+	        constraint_refs = JuMP.all_constraints(m, func, set)
+	        for constraint_ref in constraint_refs
+	            constraint = JuMP.constraint_object(constraint_ref)
+
+				func_type = typeof(constraint.func)
+				con_type = typeof(constraint.set)
+
+				if func_type == MOI.GenericAffExpr{Float64,JuMP.VariableRef}
+					if con_type = MOI.LessThan{Float64}
+						push!(con_data.linear_le_constraints,tuple(func,set))
+					elseif con_type == MOI.GreaterThan{Float64}
+						push!(con_data.linear_ge_constraints,tuple(func,set))
+					elseif con_type == MOI.EqualTo{Float64}
+						push!(con_data.linear_eq_constraints,tuple(func,set))
+					end
+					#push_con_type(con_data,set)
+
+				elseif func_type == MOI.GenericQuadExpr{Float64,JuMP.VariableRef}
+					if con_type = MOI.LessThan{Float64}
+						push!(con_data.quadratic_le_constraints,tuple(func,set))
+					elseif con_type == MOI.GreaterThan{Float64}
+						push!(con_data.quadratic_ge_constraints,tuple(func,set))
+					elseif con_type == MOI.EqualTo{Float64}
+						push!(con_data.quadtratic_eq_constraints,tuple(func,set))
+					end
+					#push_con_type(con_data,set
+	            else
+	                error("Could not figure out constraint type for $(constraint_ref) to get bounds")
+	            end
+	        end
+        end
+    end
+
+end
+
+linear_le_offset(constraints::ConstraintData) = 0
+linear_ge_offset(constraints::ConstraintData) = length(constraints.linear_le_constraints)
+linear_eq_offset(constraints::ConstraintData) = linear_ge_offset(constraints) + length(constraints.linear_ge_constraints)
+quadratic_le_offset(constraints::ConstraintData) = linear_eq_offset(constraints) + length(constraints.linear_eq_constraints)
+quadratic_ge_offset(constraints::ConstraintData) = quadratic_le_offset(constraints) + length(constraints.quadratic_le_constraints)
+quadratic_eq_offset(constraints::ConstraintData) = quadratic_ge_offset(constraints) + length(constraints.quadratic_ge_constraints)
+nlp_constraint_offset(constraints::ConstraintData) = quadratic_eq_offset(constraints) + length(constraints.quadratic_eq_constraints)
+
+function pips_jacobian_structure(d::JuMP.NLPEvaluator)
+    num_nlp_constraints = length(d.m.nlp_data.nlconstr)
+    if num_nlp_constraints > 0
+        nlp_jacobian_sparsity = MOI.jacobian_structure(d)
+    else
+        nlp_jacobian_sparsity = []
+    end
+
+    jacobian_sparsity = Tuple{Int64,Int64}[]
+    row = 1
+	con_data = get_constraint_data(d.m)
+
+    @append_to_jacobian_sparsity con_data.linear_le_constraints
+    @append_to_jacobian_sparsity con_data.linear_ge_constraints
+    @append_to_jacobian_sparsity con_data.linear_eq_constraints
+    @append_to_jacobian_sparsity con_data.quadratic_le_constraints
+    @append_to_jacobian_sparsity con_data.quadratic_ge_constraints
+    @append_to_jacobian_sparsity con_data.quadratic_eq_constraints
+    for (nlp_row, column) in nlp_jacobian_sparsity
+        push!(jacobian_sparsity, (nlp_row + row - 1, column))
+    end
+    return jacobian_sparsity
 end

@@ -1,20 +1,25 @@
 module PipsNlpInterface
 
+#Import Packages
 using SparseArrays
 using LinearAlgebra
 import MPI
-import JuMP
-using AlgebraicGraphs
-import MathOptInterface
+
+import JuMP  #Model Interface
+import MathOptInterface #Lowlevel Interface
 const MOI = MathOptInterface
 
+using AlgebraicGraphs  #ModelGraph Interface
+
+
 include("PipsNlpSolver.jl")
-include("helpers.jl")
 using .PipsNlpSolver
+
+include("helpers.jl")
 export pipsnlp_solve
 
 mutable struct ModelData
-    d    #NLP evaluator
+    d::JuMP.NLPEvaluator               #NLP evaluator
     n::Int
     m::Int
     local_m::Int
@@ -268,13 +273,17 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
                 #Local node data
                 local_data.m  = local_data.local_m + local_data.num_eqconnect + local_data.num_ineqconnect
-                local_data.n = node.numCols
+                #local_data.n = node.numCols
+                local_data.n = JuMP.num_variables(node)
                 local_data.x_sol = zeros(Float64,local_data.n)
                 local_data.firstJeqmat = sparse(local_data.firstIeq, local_data.firstJeq, local_data.firstVeq, local_data.num_eqconnect, master_data.n)
                 local_data.secondJeqmat = sparse(local_data.secondIeq, local_data.secondJeq, local_data.secondVeq, local_data.num_eqconnect, local_data.n)
                 local_data.firstJineqmat = sparse(local_data.firstIineq, local_data.firstJineq, local_data.firstVineq, local_data.num_ineqconnect, master_data.n)
                 local_data.secondJineqmat = sparse(local_data.secondIineq, local_data.secondJineq, local_data.secondVineq, local_data.num_ineqconnect, local_data.n)
 
+                if node.nlp_data == nothing
+                    JuMP._init_NLP(node)
+                end
                 local_data.d = JuMP.NLPEvaluator(node)
                 MOI.initialize(local_data.d, [:Grad,:Jac, :Hess])
                 #Ijac, Jjac = jac_structure(local_data.d)
@@ -644,9 +653,9 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     println("Created PIPS Model")
     prob = createProblemStruct(comm, model, true)
 
-    println("created problem struct")
+    println("Created problem struct")
     ret = solveProblemStruct(prob)
-    println("solved problem struct")
+    println("Solved problem struct")
     root = 0
     r = MPI.Comm_rank(comm)
 

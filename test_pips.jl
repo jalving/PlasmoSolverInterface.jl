@@ -52,7 +52,7 @@ end
 #create a link constraint between the subproblems
 @linkconstraint(graph, (1/Ns)*sum(scen_models[s][:prod] for s in 1:Ns) == 8)
 
-pipsnlp_solve(graph)
+#pipsnlp_solve(graph)
 
-MPI.Finalize()
+#MPI.Finalize()
 #pipsnlp_solve(graph,solver)
