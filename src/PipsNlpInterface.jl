@@ -251,7 +251,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             	end
 
     			#nlp_lb, nlp_ub = JuMP.constraintbounds(node)  #This is every constraint in the model
-                nlp_lb, nlp_ub = constraintbounds(node)  #This is every constraint in the model
+                nlp_lb, nlp_ub = constraintbounds(node)       #This is every constraint in the model
          		local_data.local_m  = length(nlp_lb)          #number of local constraints (rows)
 
     			newRowId = Array{Int}(undef,local_data.local_m)
