@@ -16,3 +16,8 @@ m = Model()
 @NLconstraint(m,x[3]^3 >= 4)
 
 con_data = get_constraint_data(m::JuMP.Model)
+
+d = NLPEvaluator(m)
+
+constraintbounds(con_data)
+pips_jacobian_structure(d)

@@ -90,12 +90,13 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         node.ext[:Data] = ModelData()
     end
 
-    #master (link) constraint upper and lower bounds
+    # master (link) constraint upper and lower bounds
     # master_linear_lb = []
     # master_linear_ub = []
 
 
     #TODO: get_all_linkconstraints.  We don't support subgraphs for this solver.
+    #TODO: Check for linkconstraints between a master node and children nodes
     linkconstraints = getlinkconstraints(graph) #get all of the link constraints in the graph
 
     #get arrays of lower and upper bounds for each link constraint
@@ -105,6 +106,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     # end
 
     #Store data about links
+    #NOTE: num_eqconnect and num_ineqconnect are zero since there is technically no master node here.
     nlinkeq = 0                 #Link constraint equalities
     nlinkineq = 0               #Link constraint inequalities
     eqlink_lb = Float64[]       #
@@ -233,8 +235,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
 
     #TODO Update to JuMP 0.19 and MOI.
-    #TODO Replace JuMP.constraintbounds
-    #NOTE: What does mode mean?
+    #TODO Replace JuMP.constraintbounds, Replace all of the MOI functions with helpers
     function str_prob_info(nodeid,flag, mode,col_lb,col_ub,row_lb,row_ub)
         if flag != 1
             node = modelList[nodeid+1]
@@ -500,9 +501,9 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                     ineqmat = sparse(local_m_ineq .+ local_data.firstIineq, local_data.firstJineq, local_data.firstVineq, local_m_ineq .+ local_data.num_ineqconnect, master_data.n)
                 end
                 return(length(eqmat.rowval), length(ineqmat.rowval))
-            else
-                if rowid == colid
-                    if colid ==  0
+            else #mode = :Values
+                if rowid == colid    #evaluate Jacobian for block
+                    if colid ==  0   #if it's the root node
                         local_x = x0
                     else
                         local_x = x1
@@ -520,7 +521,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                     Vineq=[local_values[jac_ineq_index];local_data.secondVineq]
                     eqmat = sparseKeepZero(Ieq, Jeq, Veq, local_m_eq + local_data.num_eqconnect, local_data.n)
                     ineqmat = sparseKeepZero(Iineq, Jineq, Vineq, local_m_ineq + local_data.num_ineqconnect, local_data.n)
-                else
+                else #evaluate
                     eqmat = sparseKeepZero(local_m_eq .+ local_data.firstIeq, local_data.firstJeq, local_data.firstVeq, local_m_eq .+ local_data.num_eqconnect, master_data.n)
                     ineqmat = sparseKeepZero(local_m_ineq .+ local_data.firstIineq, local_data.firstJineq, local_data.firstVineq, local_m_ineq .+ local_data.num_ineqconnect, master_data.n)
                 end

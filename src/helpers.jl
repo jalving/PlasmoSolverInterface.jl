@@ -315,6 +315,7 @@ function constraintbounds(con_data::ConstraintData)
 	constraint_lower[offset + 1:offset + length(constraints)] .= [constraints[i].set.value for i in 1:length(constraints)]
 	constraint_upper[offset + 1:offset + length(constraints)] .= [constraints[i].set.value for i in 1:length(constraints)]
 
+	#nonlinear constraints
 	constraints = con_data.nonlinear_constraints
 	offset = nlp_constraint_offset(con_data)
 	constraint_lower[offset + 1:offset + length(constraints)] .= [constraints[i].lb for i in 1:length(constraints)]
@@ -323,20 +324,24 @@ function constraintbounds(con_data::ConstraintData)
 	return constraint_lower,constraint_upper
 end
 
-
-function append_to_jacobian_sparsity!(jacobian_sparsity, aff::JuMP.GenericAffExpr, row)
+#####################
+# JACOBIAN
+#####################
+function append_to_jacobian_sparsity!(jacobian_sparsity, constraint::JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef}}, row)
+	aff = constraint.func
     for term in keys(aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
     end
 end
 
-function append_to_jacobian_sparsity!(jacobian_sparsity, quad::JuMP.GenericQuadExpr, row)
+function append_to_jacobian_sparsity!(jacobian_sparsity, constraint::JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef}}, row)
+	quad = constraint.func
     for term in keys(quad.aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
     end
-    for term in quad.terms
-        row_idx = term.variable_index_1
-        col_idx = term.variable_index_2
+    for term in keys(quad.terms)
+        row_idx = term.a.index
+        col_idx = term.b.index
         if row_idx == col_idx
             push!(jacobian_sparsity, (row, row_idx.value))
         else
@@ -349,8 +354,8 @@ end
 macro append_to_jacobian_sparsity(array_name)
     escrow = esc(:row)
     quote
-        for (func, set) in $(esc(array_name))
-            append_to_jacobian_sparsity!($(esc(:jacobian_sparsity)), func, $escrow)
+        for constraint in $(esc(array_name))
+            append_to_jacobian_sparsity!($(esc(:jacobian_sparsity)), constraint, $escrow)
             $escrow += 1
         end
     end
@@ -359,6 +364,7 @@ end
 function pips_jacobian_structure(d::JuMP.NLPEvaluator)
     num_nlp_constraints = length(d.m.nlp_data.nlconstr)
     if num_nlp_constraints > 0
+		MOI.initialize(d,[:Grad,:Jac,:Hess])
         nlp_jacobian_sparsity = MOI.jacobian_structure(d)
     else
         nlp_jacobian_sparsity = []
@@ -380,6 +386,96 @@ function pips_jacobian_structure(d::JuMP.NLPEvaluator)
         push!(jacobian_sparsity, (nlp_row + row - 1, column))
     end
     return jacobian_sparsity
+end
+
+#####################
+# HESSIAN
+#####################
+append_to_hessian_sparsity!(hessian_sparsity, ::Union{JuMP.VariableRef,JuMP.GenericAffExpr}) = nothing
+
+function append_to_hessian_sparsity!(hessian_sparsity, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+    for term in keys(quad.terms)
+        push!(hessian_sparsity, (term.a.index.value,term.b.index.value))
+    end
+end
+
+#NOTE: there can be duplicate entries
+function pips_hessian_lagrangian_structure(d::JuMP.NLPEvaluator)
+    hessian_sparsity = Tuple{Int64,Int64}[]
+	m = d.m
+	con_data = get_constraint_data(m)
+	if m.nlp_data == nothing
+	    append_to_hessian_sparsity!(hessian_sparsity, JuMP.objective_function(m))
+	end
+    for constraint in con_data.quadratic_le_constraints
+		quad = constraint.func
+        append_to_hessian_sparsity!(hessian_sparsity, quad)
+    end
+    for constraint in con_data.quadratic_ge_constraints
+		quad = constraint.func
+        append_to_hessian_sparsity!(hessian_sparsity, quad)
+    end
+	for constraint in con_data.quadratic_interval_constraints
+		quad = constraint.func
+		append_to_hessian_sparsity!(hessian_sparsity, quad)
+	end
+    for constraint in con_data.quadratic_eq_constraints
+		quad = constraint.func
+        append_to_hessian_sparsity!(hessian_sparsity, quad)
+    end
+    nlp_hessian_sparsity = MOI.hessian_lagrangian_structure(d)
+    append!(hessian_sparsity, nlp_hessian_sparsity)
+    return hessian_sparsity
+end
+
+#####################################
+# OBJECTIVE FUNCTION EVALUATION
+#####################################
+
+function eval_function(var::JuMP.VariableRef, x)
+    return x[var.index.value]
+end
+
+function eval_function(aff::JuMP.GenericAffExpr{Float64,VariableRef}, x)
+    function_value = aff.constant
+    for (var,coeff) in aff.terms
+        # Note the implicit assumtion that VariableIndex values match up with
+        # x indices. This is valid because in this wrapper ListOfVariableIndices
+        # is always [1, ..., NumberOfVariables].
+        function_value += coeff*x[var.index.value]
+    end
+    return function_value
+end
+
+function eval_function(quad::JuMP.GenericQuadExpr{Float64,VariableRef}, x)
+    function_value = quad.aff.constant
+    for term in quad.affine_terms
+        function_value += term.coefficient*x[term.variable_index.value]
+    end
+    for term in quad.quadratic_terms
+        row_idx = term.variable_index_1
+        col_idx = term.variable_index_2
+        coefficient = term.coefficient
+        if row_idx == col_idx
+            function_value += 0.5*coefficient*x[row_idx.value]*x[col_idx.value]
+        else
+            function_value += coefficient*x[row_idx.value]*x[col_idx.value]
+        end
+    end
+    return function_value
+end
+
+function eval_objective(model::Optimizer, x)
+    # The order of the conditions is important. NLP objectives override regular
+    # objectives.
+    if model.nlp_data.has_objective
+        return MOI.eval_objective(model.nlp_data.evaluator, x)
+    elseif model.objective !== nothing
+        return eval_function(model.objective, x)
+    else
+        # No objective function set. This could happen with FEASIBILITY_SENSE.
+        return 0.0
+    end
 end
 
 
