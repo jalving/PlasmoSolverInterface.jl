@@ -185,9 +185,6 @@ function variablelowerbounds(m::JuMP.Model)
     return lower_bounds
 end
 
-function pips_jacobian_structure(m::JuMP.Model)
-end
-
 mutable struct ConstraintData
     linear_le_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.LessThan{Float64}}}
     linear_ge_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.GreaterThan{Float64}}}
@@ -325,17 +322,17 @@ function constraintbounds(con_data::ConstraintData)
 end
 
 #####################
-# JACOBIAN
+# JACOBIAN STRUCTURE
 #####################
-function append_to_jacobian_sparsity!(jacobian_sparsity, constraint::JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef}}, row)
-	aff = constraint.func
+function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericAffExpr{Float64,VariableRef}, row)
+	aff = func
     for term in keys(aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
     end
 end
 
-function append_to_jacobian_sparsity!(jacobian_sparsity, constraint::JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef}}, row)
-	quad = constraint.func
+function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericQuadExpr{Float64,VariableRef}, row)
+	quad = func
     for term in keys(quad.aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
     end
@@ -355,7 +352,8 @@ macro append_to_jacobian_sparsity(array_name)
     escrow = esc(:row)
     quote
         for constraint in $(esc(array_name))
-            append_to_jacobian_sparsity!($(esc(:jacobian_sparsity)), constraint, $escrow)
+			func = constraint.func
+            append_to_jacobian_sparsity!($(esc(:jacobian_sparsity)), func, $escrow)
             $escrow += 1
         end
     end
@@ -388,9 +386,22 @@ function pips_jacobian_structure(d::JuMP.NLPEvaluator)
     return jacobian_sparsity
 end
 
+function pips_jacobian_structure(m::JuMP.Model)
+end
+
 #####################
-# HESSIAN
+# HESSIAN STRUCTURE
 #####################
+function has_nl_objective(m::JuMP.Model)
+	if m.nlp_data == nothing
+		return false
+	elseif m.nlp_data.nlobj != nothing
+		return true
+	else
+		return false
+	end
+end
+
 append_to_hessian_sparsity!(hessian_sparsity, ::Union{JuMP.VariableRef,JuMP.GenericAffExpr}) = nothing
 
 function append_to_hessian_sparsity!(hessian_sparsity, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
@@ -406,6 +417,8 @@ function pips_hessian_lagrangian_structure(d::JuMP.NLPEvaluator)
 	con_data = get_constraint_data(m)
 	if m.nlp_data == nothing
 	    append_to_hessian_sparsity!(hessian_sparsity, JuMP.objective_function(m))
+	elseif m.nlp_data.nlobj == nothing
+		append_to_hessian_sparsity!(hessian_sparsity, JuMP.objective_function(m))
 	end
     for constraint in con_data.quadratic_le_constraints
 		quad = constraint.func
@@ -431,7 +444,7 @@ end
 #####################################
 # OBJECTIVE FUNCTION EVALUATION
 #####################################
-
+#x is an array of variable values returned from the solver
 function eval_function(var::JuMP.VariableRef, x)
     return x[var.index.value]
 end
@@ -439,7 +452,7 @@ end
 function eval_function(aff::JuMP.GenericAffExpr{Float64,VariableRef}, x)
     function_value = aff.constant
     for (var,coeff) in aff.terms
-        # Note the implicit assumtion that VariableIndex values match up with
+        # NOTE the implicit assumtion that VariableIndex values match up with
         # x indices. This is valid because in this wrapper ListOfVariableIndices
         # is always [1, ..., NumberOfVariables].
         function_value += coeff*x[var.index.value]
@@ -449,33 +462,216 @@ end
 
 function eval_function(quad::JuMP.GenericQuadExpr{Float64,VariableRef}, x)
     function_value = quad.aff.constant
-    for term in quad.affine_terms
-        function_value += term.coefficient*x[term.variable_index.value]
+    for (var,coeff) in quad.aff.terms
+        function_value += coeff*x[var.index.value]
     end
-    for term in quad.quadratic_terms
-        row_idx = term.variable_index_1
-        col_idx = term.variable_index_2
-        coefficient = term.coefficient
-        if row_idx == col_idx
-            function_value += 0.5*coefficient*x[row_idx.value]*x[col_idx.value]
-        else
-            function_value += coefficient*x[row_idx.value]*x[col_idx.value]
-        end
+    for (terms,coeff) in quad.terms
+        row_idx = terms.a.index
+        col_idx = terms.b.index
+		function_value += coeff*x[row_idx.value]*x[col_idx.value]
     end
     return function_value
 end
 
-function eval_objective(model::Optimizer, x)
+function pips_eval_objective(d::JuMP.NLPEvaluator, x)
     # The order of the conditions is important. NLP objectives override regular
     # objectives.
-    if model.nlp_data.has_objective
-        return MOI.eval_objective(model.nlp_data.evaluator, x)
-    elseif model.objective !== nothing
-        return eval_function(model.objective, x)
+	m = d.m
+    if has_nl_objective(m)
+        return MOI.eval_objective(d, x)
+    elseif JuMP.objective_function(m) !== nothing
+        return eval_function(JuMP.objective_function(m), x)
     else
-        # No objective function set. This could happen with FEASIBILITY_SENSE.
-        return 0.0
+        return 0.0 # No objective function set. This could happen with FEASIBILITY_SENSE.
     end
+end
+
+#####################################
+# OBJECTIVE GRADIENT EVALUATION
+#####################################
+function fill_gradient!(grad, x, var::JuMP.VariableRef)
+    fill!(grad, 0.0)
+    grad[var.index.value] = 1.0
+end
+
+function fill_gradient!(grad, x, aff::JuMP.GenericAffExpr{Float64,VariableRef})
+    fill!(grad, 0.0)
+	for	(var,coeff) in aff.terms
+        grad[var.index.value] += coeff
+    end
+end
+
+function fill_gradient!(grad, x, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+    fill!(grad, 0.0)
+    for	(var,coeff) in quad.aff.terms
+        grad[var.index.value] += coeff
+    end
+    #for term in quad.quadratic_terms
+	for (terms,coeff) in quad.terms
+        row_idx = terms.a.index
+        col_idx = terms.b.index
+        if row_idx == col_idx
+            grad[row_idx.value] += 2*coeff*x[row_idx.value]
+        else
+            grad[row_idx.value] += coeff*x[col_idx.value]
+            grad[col_idx.value] += coeff*x[row_idx.value]
+        end
+    end
+end
+
+function pips_eval_objective_gradient(d::JuMP.NLPEvaluator, grad, x)
+	m = d.m
+    if has_nl_objective(m)
+        MOI.eval_objective_gradient(d, grad, x)
+    elseif JuMP.objective_function(m) !== nothing
+        fill_gradient!(grad, x, JuMP.objective_function(m))
+    else
+        fill!(grad, 0.0)
+    end
+    return
+end
+
+#####################################
+# CONSTRAINT EVALUATION
+#####################################
+# Refers to local variables in eval_constraint() below.
+macro eval_function(array_name)
+    escrow = esc(:row)
+    quote
+        for constraint in $(esc(array_name))
+			func = constraint.func
+            $(esc(:g))[$escrow] = eval_function(func, $(esc(:x)))
+            $escrow += 1
+        end
+    end
+end
+
+function pips_eval_constraint(d::JuMP.NLPEvaluator, g, x)
+    row = 1
+    @eval_function con_data.linear_le_constraints
+    @eval_function con_data.linear_ge_constraints
+	@eval_function con_data.linear_interval_constraints
+    @eval_function con_data.linear_eq_constraints
+    @eval_function con_data.quadratic_le_constraints
+    @eval_function con_data.quadratic_ge_constraints
+	@eval_function con_data.quadratic_interval_constraints
+    @eval_function con_data.quadratic_eq_constraints
+    nlp_g = view(g, row:length(g))
+    MOI.eval_constraint(d, nlp_g, x)
+    return
+end
+
+#####################################
+# JACOBIAN EVALUATION
+#####################################
+function fill_constraint_jacobian!(jac_values, start_offset, x, aff::JuMP.GenericAffExpr{Float64,VariableRef})
+    num_coefficients = length(aff.terms)
+    #for i in 1:num_coefficients
+	i = 1
+	for coeff in values(aff.terms) #ordered dictionary
+        jac_values[start_offset+i] = coeff
+		i += 1
+    end
+    return num_coefficients
+end
+
+function fill_constraint_jacobian!(jac_values, start_offset, x, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+	aff = quad.aff
+    num_affine_coefficients = length(aff.terms)
+	i = 1
+	for coeff in values(aff.terms)
+        jac_values[start_offset+i] = coeff #quad.affine_terms[i].coefficient
+		i += 1
+    end
+    num_quadratic_coefficients = 0
+
+	for (terms,coeff) in quad.terms
+        row_idx = terms.a.index
+        col_idx = terms.b.index
+        if row_idx == col_idx
+            jac_values[start_offset+num_affine_coefficients+num_quadratic_coefficients+1] = 2*coeff*x[row_idx.value]
+            num_quadratic_coefficients += 1
+        else
+            # Note that the order matches the Jacobian sparsity pattern.
+            jac_values[start_offset+num_affine_coefficients+num_quadratic_coefficients+1] = coeff*x[col_idx.value]
+            jac_values[start_offset+num_affine_coefficients+num_quadratic_coefficients+2] = coeff*x[row_idx.value]
+            num_quadratic_coefficients += 2
+        end
+    end
+    return num_affine_coefficients + num_quadratic_coefficients
+end
+
+# Refers to local variables in eval_constraint_jacobian() below.
+macro fill_constraint_jacobian(array_name)
+    esc_offset = esc(:offset)
+    quote
+        for constraint in $(esc(array_name))
+			func = constraint.func
+            $esc_offset += fill_constraint_jacobian!($(esc(:jac_values)),
+                                                     $esc_offset, $(esc(:x)),
+                                                     func)
+        end
+    end
+end
+
+function pips_eval_constraint_jacobian(d::JuMP.NLPEvaluator, jac_values, x)
+    offset = 0
+	m = d.m
+	con_data = m.ext[:constraint_data]
+    @fill_constraint_jacobian con_data.linear_le_constraints
+    @fill_constraint_jacobian con_data.linear_ge_constraints
+    @fill_constraint_jacobian con_data.linear_eq_constraints
+    @fill_constraint_jacobian con_data.quadratic_le_constraints
+    @fill_constraint_jacobian con_data.quadratic_ge_constraints
+    @fill_constraint_jacobian con_data.quadratic_eq_constraints
+
+    nlp_values = view(jac_values, 1+offset:length(jac_values))
+    MOI.eval_constraint_jacobian(d, nlp_values, x)
+    return
+end
+
+##########################################
+# HESSIAN OF THE LAGRANGIAN EVALUATION
+#########################################
+function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor,::Union{JuMP.VariableRef,JuMP.GenericAffExpr{Float64,VariableRef},Nothing})
+    return 0
+end
+
+function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+	i = 1
+	for coeff in values(quad.terms)
+        hess_values[start_offset + i] = scale_factor*coeff
+		i += 1
+    end
+    return length(quad.terms)
+end
+
+function pips_eval_hessian_lagrangian(d::JuMP.NLPEvaluator, hess_values, x, obj_factor, lambda)
+    offset = 0
+	m = d.m
+	con_data = m.ext[:constraint_data]
+	if !(has_nl_objective(m))
+        offset += fill_hessian_lagrangian!(hess_values, 0, obj_factor, JuMP.objective_function(m))
+    end
+    for (i, constraint) in enumerate(con_data.quadratic_le_constraints)
+		quad = constraint.func
+        offset += fill_hessian_lagrangian!(hess_values, offset, lambda[i+quadratic_le_offset(con_data)], quad)
+    end
+    for (i, constraint) in enumerate(con_data.quadratic_ge_constraints)
+		quad = constraint.func
+        offset += fill_hessian_lagrangian!(hess_values, offset, lambda[i+quadratic_ge_offset(con_data)], quad)
+    end
+	for (i, constraint) in enumerate(con_data.quadratic_interval_constraints)
+		quad = constraint.func
+        offset += fill_hessian_lagrangian!(hess_values, offset, lambda[i+quadratic_interval_offset(con_data)], quad)
+    end
+    for (i, constraint) in enumerate(con_data.quadratic_eq_constraints)
+		quad = constraint.func
+        offset += fill_hessian_lagrangian!(hess_values, offset, lambda[i+quadratic_eq_offset(con_data)], quad)
+    end
+    nlp_values = view(hess_values, 1 + offset : length(hess_values))
+    nlp_lambda = view(lambda, 1 + nlp_constraint_offset(con_data) : length(lambda))
+    MOI.eval_hessian_lagrangian(d, nlp_values, x, obj_factor, nlp_lambda)
 end
 
 

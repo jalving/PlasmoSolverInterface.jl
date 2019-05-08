@@ -12,7 +12,7 @@ const MOI = MathOptInterface
 using AlgebraicGraphs  #ModelGraph Interface
 
 
-include("PipsNlpSolver.jl")
+include("PipsNlpCInterface.jl")
 using .PipsNlpSolver
 
 include("helpers.jl")
@@ -586,8 +586,8 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             else
                 return 0
             end
-        else
-            if rowid==colid
+        else #fill in values
+            if rowid == colid
                 node_Hmap = node.ext[:Hmap]
                 node_Hrows  = node.ext[:Hrows]
                 node_Hcols = node.ext[:Hcols]

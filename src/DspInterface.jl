@@ -1,5 +1,5 @@
 # Plasmo Interface to Dsp
-module PlasmoDspInterface
+module DspInterface
 
 include("DspCInterface.jl")
 Pkg.installed("MPI") == nothing || using MPI
