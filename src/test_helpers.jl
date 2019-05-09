@@ -40,3 +40,6 @@ pips_eval_constraint_jacobian(d,jac_values,x)
 
 hess_values = Array{Float64}(undef,length(hess_structure))
 pips_eval_hessian_lagrangian(d,hess_values,x,1.0,ones(length(hess_values)))
+
+var_lower = variablelowerbounds(m)
+var_upper = variableupperbounds(m)

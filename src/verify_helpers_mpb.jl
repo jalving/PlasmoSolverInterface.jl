@@ -34,3 +34,6 @@ MPB.eval_jac_g(d,jac_values,x)
 
 hess_values = Array{Float64}(undef,length(hess_structure[1]))
 MPB.eval_hesslag(d,hess_values,x,1.0,ones(length(hess_values)))
+
+var_lower = m.colLower
+var_upper = m.colUpper

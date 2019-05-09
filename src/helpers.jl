@@ -186,14 +186,14 @@ function variablelowerbounds(m::JuMP.Model)
 end
 
 mutable struct ConstraintData
-    linear_le_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.LessThan{Float64}}}
-    linear_ge_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.GreaterThan{Float64}}}
-	linear_interval_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.Interval{Float64}}}
-    linear_eq_constraints::Vector{JuMP.ScalarConstraint{GenericAffExpr{Float64,VariableRef},MathOptInterface.EqualTo{Float64}}}
-    quadratic_le_constraints::Vector{JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef},MathOptInterface.LessThan{Float64}}}
-    quadratic_ge_constraints::Vector{JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef},MathOptInterface.GreaterThan{Float64}}}
-	quadratic_interval_constraints::Vector{JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef},MathOptInterface.Interval{Float64}}}
-    quadratic_eq_constraints::Vector{JuMP.ScalarConstraint{GenericQuadExpr{Float64,VariableRef},MathOptInterface.EqualTo{Float64}}}
+    linear_le_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericAffExpr{Float64,JuMP.VariableRef},MathOptInterface.LessThan{Float64}}}
+    linear_ge_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericAffExpr{Float64,JuMP.VariableRef},MathOptInterface.GreaterThan{Float64}}}
+	linear_interval_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericAffExpr{Float64,JuMP.VariableRef},MathOptInterface.Interval{Float64}}}
+    linear_eq_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericAffExpr{Float64,JuMP.VariableRef},MathOptInterface.EqualTo{Float64}}}
+    quadratic_le_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericQuadExpr{Float64,JuMP.VariableRef},MathOptInterface.LessThan{Float64}}}
+    quadratic_ge_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericQuadExpr{Float64,JuMP.VariableRef},MathOptInterface.GreaterThan{Float64}}}
+	quadratic_interval_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericQuadExpr{Float64,JuMP.VariableRef},MathOptInterface.Interval{Float64}}}
+    quadratic_eq_constraints::Vector{JuMP.ScalarConstraint{JuMP.GenericQuadExpr{Float64,JuMP.VariableRef},MathOptInterface.EqualTo{Float64}}}
 	nonlinear_constraints::Vector{JuMP._NonlinearConstraint}
 end
 
@@ -324,14 +324,14 @@ end
 #####################
 # JACOBIAN STRUCTURE
 #####################
-function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericAffExpr{Float64,VariableRef}, row)
+function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericAffExpr{Float64,JuMP.VariableRef}, row)
 	aff = func
     for term in keys(aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
     end
 end
 
-function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericQuadExpr{Float64,VariableRef}, row)
+function append_to_jacobian_sparsity!(jacobian_sparsity, func::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef}, row)
 	quad = func
     for term in keys(quad.aff.terms)
         push!(jacobian_sparsity, (row, term.index.value))
@@ -404,7 +404,7 @@ end
 
 append_to_hessian_sparsity!(hessian_sparsity, ::Union{JuMP.VariableRef,JuMP.GenericAffExpr}) = nothing
 
-function append_to_hessian_sparsity!(hessian_sparsity, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+function append_to_hessian_sparsity!(hessian_sparsity, quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
     for term in keys(quad.terms)
         push!(hessian_sparsity, (term.a.index.value,term.b.index.value))
     end
@@ -449,7 +449,7 @@ function eval_function(var::JuMP.VariableRef, x)
     return x[var.index.value]
 end
 
-function eval_function(aff::JuMP.GenericAffExpr{Float64,VariableRef}, x)
+function eval_function(aff::JuMP.GenericAffExpr{Float64,JuMP.VariableRef}, x)
     function_value = aff.constant
     for (var,coeff) in aff.terms
         # NOTE the implicit assumtion that VariableIndex values match up with
@@ -460,7 +460,7 @@ function eval_function(aff::JuMP.GenericAffExpr{Float64,VariableRef}, x)
     return function_value
 end
 
-function eval_function(quad::JuMP.GenericQuadExpr{Float64,VariableRef}, x)
+function eval_function(quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef}, x)
     function_value = quad.aff.constant
     for (var,coeff) in quad.aff.terms
         function_value += coeff*x[var.index.value]
@@ -494,14 +494,14 @@ function fill_gradient!(grad, x, var::JuMP.VariableRef)
     grad[var.index.value] = 1.0
 end
 
-function fill_gradient!(grad, x, aff::JuMP.GenericAffExpr{Float64,VariableRef})
+function fill_gradient!(grad, x, aff::JuMP.GenericAffExpr{Float64,JuMP.VariableRef})
     fill!(grad, 0.0)
 	for	(var,coeff) in aff.terms
         grad[var.index.value] += coeff
     end
 end
 
-function fill_gradient!(grad, x, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+function fill_gradient!(grad, x, quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
     fill!(grad, 0.0)
     for	(var,coeff) in quad.aff.terms
         grad[var.index.value] += coeff
@@ -548,6 +548,7 @@ end
 
 function pips_eval_constraint(d::JuMP.NLPEvaluator, g, x)
     row = 1
+	con_data = d.m.ext[:constraint_data]
     @eval_function con_data.linear_le_constraints
     @eval_function con_data.linear_ge_constraints
 	@eval_function con_data.linear_interval_constraints
@@ -564,7 +565,7 @@ end
 #####################################
 # JACOBIAN EVALUATION
 #####################################
-function fill_constraint_jacobian!(jac_values, start_offset, x, aff::JuMP.GenericAffExpr{Float64,VariableRef})
+function fill_constraint_jacobian!(jac_values, start_offset, x, aff::JuMP.GenericAffExpr{Float64,JuMP.VariableRef})
     num_coefficients = length(aff.terms)
     #for i in 1:num_coefficients
 	i = 1
@@ -575,7 +576,7 @@ function fill_constraint_jacobian!(jac_values, start_offset, x, aff::JuMP.Generi
     return num_coefficients
 end
 
-function fill_constraint_jacobian!(jac_values, start_offset, x, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+function fill_constraint_jacobian!(jac_values, start_offset, x, quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
 	aff = quad.aff
     num_affine_coefficients = length(aff.terms)
 	i = 1
@@ -635,13 +636,12 @@ end
 ##########################################
 # HESSIAN OF THE LAGRANGIAN EVALUATION
 #########################################
-function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor,::Union{JuMP.VariableRef,JuMP.GenericAffExpr{Float64,VariableRef},Nothing})
+function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor,::Union{JuMP.VariableRef,JuMP.GenericAffExpr{Float64,JuMP.VariableRef},Nothing})
     return 0
 end
 
-function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
+function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor, quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
 	i = 1
-
 	for (terms,coeff) in quad.terms
 		row_idx = terms.a.index
 		col_idx = terms.b.index
@@ -651,10 +651,6 @@ function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor, quad:
 			hess_values[start_offset + i] = scale_factor*coeff
 		end
 		i += 1
-	# for coeff in values(quad.terms)
-    #     hess_values[start_offset + i] = scale_factor*coeff
-	# 	i += 1
-    # end
 	end
     return length(quad.terms)
 end
