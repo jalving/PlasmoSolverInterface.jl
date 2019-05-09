@@ -214,6 +214,11 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             local_data.linkVeq =  copy(node.ext[:linkVeq])
             node.ext[:linkVeq] = nothing
         end
+
+        #Add constraint data for each node to help with function evaluations
+        constraint_data = get_constraint_data(node)
+        node.ext[:constraint_data] = constraint_data
+
     end
 
 

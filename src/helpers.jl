@@ -620,9 +620,11 @@ function pips_eval_constraint_jacobian(d::JuMP.NLPEvaluator, jac_values, x)
 	con_data = m.ext[:constraint_data]
     @fill_constraint_jacobian con_data.linear_le_constraints
     @fill_constraint_jacobian con_data.linear_ge_constraints
+	@fill_constraint_jacobian con_data.linear_interval_constraints
     @fill_constraint_jacobian con_data.linear_eq_constraints
     @fill_constraint_jacobian con_data.quadratic_le_constraints
     @fill_constraint_jacobian con_data.quadratic_ge_constraints
+	@fill_constraint_jacobian con_data.quadratic_interval_constraints
     @fill_constraint_jacobian con_data.quadratic_eq_constraints
 
     nlp_values = view(jac_values, 1+offset:length(jac_values))
@@ -639,10 +641,21 @@ end
 
 function fill_hessian_lagrangian!(hess_values, start_offset, scale_factor, quad::JuMP.GenericQuadExpr{Float64,VariableRef})
 	i = 1
-	for coeff in values(quad.terms)
-        hess_values[start_offset + i] = scale_factor*coeff
+
+	for (terms,coeff) in quad.terms
+		row_idx = terms.a.index
+		col_idx = terms.b.index
+		if row_idx == col_idx
+			hess_values[start_offset + i] = 2*scale_factor*coeff
+		else
+			hess_values[start_offset + i] = scale_factor*coeff
+		end
 		i += 1
-    end
+	# for coeff in values(quad.terms)
+    #     hess_values[start_offset + i] = scale_factor*coeff
+	# 	i += 1
+    # end
+	end
     return length(quad.terms)
 end
 
