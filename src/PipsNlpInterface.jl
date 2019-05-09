@@ -83,7 +83,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     scen = length(submodels)
     #############################
     master = getmodel(master_node)
-    modelList = [master; submodels]
+    modelList = [master; submodels]  #NOTE: this function creates an empty master problem
 
     #Add ModelData to each model
     for (idx,node) in enumerate(modelList)
