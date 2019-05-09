@@ -135,7 +135,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
                 push!(linkVeq, coeff)             #the coefficient
             end
         else #LOOK FOR INEQUALITY CONSTRAINTS
-            @assert link.set in [MOI.Interval{Float64},MOI.LessThan{Float64},MOI.GreaterThan{Float64}]
+            @assert typeof(link.set) in [MOI.Interval{Float64},MOI.LessThan{Float64},MOI.GreaterThan{Float64}]
             if isa(link.set,MOI.LessThan)
                 nlinkineq = nlinkineq + 1
                 push!(ineqlink_lb, -Inf)
