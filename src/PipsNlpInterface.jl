@@ -224,7 +224,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     #TODO: Test this works
     function str_init_x0(nodeid, x0)
         node = modelList[nodeid+1]
-        jump_initval = JuMP.start_value.(JuMP.all_variables(node))
+        jump_initval = copy(JuMP.start_value.(JuMP.all_variables(node)))
         local_initval = Vector{Float64}(undef,JuMP.num_variables(node))
 
 
