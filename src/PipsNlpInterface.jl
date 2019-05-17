@@ -394,6 +394,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
     #x0 is first stage variable values, x1 is local values
     function str_eval_f(nodeid,x0,x1)
+        println("eval_f")
     	node = modelList[nodeid+1] #Julia doesn't start index at 0
         local_data = getData(node)
         local_d = getData(node).d
@@ -411,6 +412,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_g(nodeid,x0,x1,new_eq_g, new_inq_g)
+        println("eval_g")
         node = modelList[nodeid+1]
         local_data = getData(node)
         local_d = getData(node).d
@@ -447,6 +449,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
 
     function str_eval_grad_f(rowid,colid,x0,x1,new_grad_f)
+        println("eval_grad_f")
         node = modelList[rowid+1]
         if rowid == colid
             local_data = getData(node)
@@ -488,6 +491,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_jac_g(rowid,colid,flag, x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
+        println("eval_jac_g")
         if flag != 1
             node = modelList[rowid+1]
             local_data = getData(node)
@@ -574,6 +578,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_h(rowid,colid,x0,x1,obj_factor,lambda,mode,rowidx,colptr,values)
+        println("eval_h")
         node = modelList[colid+1]
         local_data = getData(node)
         if mode == :Structure
@@ -646,7 +651,6 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
         return Int32(1)
     end
 
-    println("test")
     if !MPI.Initialized()
         MPI.Init()
     end
@@ -718,7 +722,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     elseif	ret == 2
         status = :Maximum_Iterations_Exceeded
     elseif	ret == 3
-        stauts = :Infeasible_Problem_Detected
+        status = :Infeasible_Problem_Detected
     elseif ret == 4
         status = :Restoration_needed
     else
