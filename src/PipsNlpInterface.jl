@@ -394,7 +394,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
     #x0 is first stage variable values, x1 is local values
     function str_eval_f(nodeid,x0,x1)
-        println("eval_f")
+        #println("eval_f")
     	node = modelList[nodeid+1] #Julia doesn't start index at 0
         local_data = getData(node)
         local_d = getData(node).d
@@ -412,7 +412,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_g(nodeid,x0,x1,new_eq_g, new_inq_g)
-        println("eval_g")
+        #println("eval_g")
         node = modelList[nodeid+1]
         local_data = getData(node)
         local_d = getData(node).d
@@ -449,7 +449,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
 
     function str_eval_grad_f(rowid,colid,x0,x1,new_grad_f)
-        println("eval_grad_f")
+        #println("eval_grad_f")
         node = modelList[rowid+1]
         if rowid == colid
             local_data = getData(node)
@@ -491,7 +491,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_jac_g(rowid,colid,flag, x0,x1,mode,e_rowidx,e_colptr,e_values,i_rowidx,i_colptr,i_values)
-        println("eval_jac_g")
+        #println("eval_jac_g")
         if flag != 1
             node = modelList[rowid+1]
             local_data = getData(node)
@@ -578,7 +578,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     end
 
     function str_eval_h(rowid,colid,x0,x1,obj_factor,lambda,mode,rowidx,colptr,values)
-        println("eval_h")
+        #println("eval_h")
         node = modelList[colid+1]
         local_data = getData(node)
         if mode == :Structure
@@ -654,7 +654,7 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     if !MPI.Initialized()
         MPI.Init()
     end
-    println("Loaded Functions")
+    #println("Loaded Functions")
     comm = MPI.COMM_WORLD
     if(MPI.Comm_rank(comm) == 0)
         t1 = time()
@@ -664,12 +664,12 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
 
     #Create FakeModel (The PIPS interface model) and pass all the functions it requires
     model = FakeModel(:Min,0, scen,str_init_x0, str_prob_info, str_eval_f, str_eval_g, str_eval_grad_f, str_eval_jac_g, str_eval_h,str_write_solution)
-    println("Created PIPS Model")
+    #println("Created PIPS Model")
     prob = createProblemStruct(comm, model, true)
 
-    println("Created problem struct")
+    println("Created PIPS-NLP Problem Struct")
     ret = solveProblemStruct(prob)
-    println("Solved problem struct")
+    println("Solved PIPS-NLP Problem Struct")
     root = 0
     r = MPI.Comm_rank(comm)
 

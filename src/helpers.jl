@@ -474,8 +474,7 @@ function eval_function(quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef}, x)
 end
 
 function pips_eval_objective(d::JuMP.NLPEvaluator, x)
-    # The order of the conditions is important. NLP objectives override regular
-    # objectives.
+    # The order of the conditions is important. NLP objectives override regular objectives.
 	m = d.m
     if has_nl_objective(m)
         return MOI.eval_objective(d, x)
@@ -492,6 +491,7 @@ end
 function fill_gradient!(grad, x, var::JuMP.VariableRef)
     fill!(grad, 0.0)
     grad[var.index.value] = 1.0
+	return
 end
 
 function fill_gradient!(grad, x, aff::JuMP.GenericAffExpr{Float64,JuMP.VariableRef})
@@ -499,6 +499,7 @@ function fill_gradient!(grad, x, aff::JuMP.GenericAffExpr{Float64,JuMP.VariableR
 	for	(var,coeff) in aff.terms
         grad[var.index.value] += coeff
     end
+	return
 end
 
 function fill_gradient!(grad, x, quad::JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
@@ -517,6 +518,7 @@ function fill_gradient!(grad, x, quad::JuMP.GenericQuadExpr{Float64,JuMP.Variabl
             grad[col_idx.value] += coeff*x[row_idx.value]
         end
     end
+	return
 end
 
 function pips_eval_objective_gradient(d::JuMP.NLPEvaluator, grad, x)
