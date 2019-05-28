@@ -136,22 +136,19 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
             end
         else #LOOK FOR INEQUALITY CONSTRAINTS
             @assert typeof(link.set) in [MOI.Interval{Float64},MOI.LessThan{Float64},MOI.GreaterThan{Float64}]
+            nlinkineq = nlinkineq + 1
+            row = nlinkineq
             if isa(link.set,MOI.LessThan)
-                nlinkineq = nlinkineq + 1
                 push!(ineqlink_lb, -Inf)
                 push!(ineqlink_ub, link.set.upper)
-                row = nlinkineq
             elseif isa(link.set,MOI.GreaterThan)
-                nlinkineq = nlinkineq + 1
                 push!(ineqlink_lb, link.set.lower)
                 push!(ineqlink_ub, Inf)
-                row = nlinkineq
             elseif isa(link.set,MOI.Interval)
-                nlinkineq = nlinkineq + 1
                 push!(ineqlink_lb, link.set.lower)
                 push!(ineqlink_ub, link.set.upper)
-                row = nlinkineq
             end
+
             #Populate Connection Matrix
             for (var,coeff) in link.func.terms
                 node = var.model
