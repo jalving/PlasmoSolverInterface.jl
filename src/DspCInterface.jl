@@ -4,22 +4,23 @@ module DspCInterface
 
 #import ..Dsp
 import Compat: String, unsafe_wrap
+using Pkg
 #import JuMP
-
-Pkg.installed("MPI") == nothing || using MPI
-
+using MPI
+#Pkg.installed("MPI") == nothing || using MPI
+#"MPI" in keys(Pkg.installed())  || using MPI
 #export DspModel, @dsp_ccall,freeDSP,
 
 ###############################################################################
 # Help functions
 ###############################################################################
 macro dsp_ccall(func, args...)
-    @static if is_unix()
+    @static if Sys.isunix()
         return esc(quote
             ccall(($func, "libDsp"), $(args...))
         end)
     end
-    @static if is_windows()
+    @static if Sys.iswindows()
         return esc(quote
             ccall(($func, "libDsp"), stdcall, $(args...))
         end)
@@ -27,7 +28,7 @@ macro dsp_ccall(func, args...)
 end
 
 mutable struct DspModel
-    p::Ptr{Void}
+    p::Ptr{Nothing}
 
     # Number of blocks
     nblocks::Int
@@ -57,7 +58,7 @@ mutable struct DspModel
 
     function DspModel()
         # assign Dsp pointer
-        p = @dsp_ccall("createEnv", Ptr{Void}, ())
+        p = @dsp_ccall("createEnv", Ptr{Nothing}, ())
         # initialize variables
         nblocks = 0
         solve_type = :Dual
@@ -84,7 +85,7 @@ function freeDSP(dsp::DspModel)
     if dsp.p == C_NULL
         return
     else
-        @dsp_ccall("freeEnv", Void, (Ptr{Void},), dsp.p)
+        @dsp_ccall("freeEnv", Nothing, (Ptr{Nothing},), dsp.p)
         dsp.p = C_NULL
     end
     dsp.nblocks = 0
@@ -100,7 +101,7 @@ end
 
 function freeModel(dsp::DspModel)
     check_problem(dsp)
-    @dsp_ccall("freeModel", Void, (Ptr{Void},), dsp.p)
+    @dsp_ccall("freeModel", Nothing, (Ptr{Nothing},), dsp.p)
     dsp.nblocks = 0
     dsp.numRows = 0
     dsp.numCols = 0
@@ -118,7 +119,7 @@ end
 
 function readParamFile(dsp::DspModel, param_file::AbstractString)
     check_problem(dsp)
-    @dsp_ccall("readParamFile", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, param_file);
+    @dsp_ccall("readParamFile", Nothing, (Ptr{Nothing}, Ptr{UInt8}), dsp.p, param_file);
 end
 
 ###############################################################################
@@ -129,7 +130,7 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     # set number of blocks
     dsp.nblocks = nblocks
     # set MPI settings
-    if isdefined(:MPI) && MPI.Initialized()
+    if isdefined(Main,:MPI) && MPI.Initialized()
         dsp.comm = MPI.COMM_WORLD
         dsp.comm_size = MPI.Comm_size(dsp.comm)
         dsp.comm_rank = MPI.Comm_rank(dsp.comm)
@@ -143,7 +144,7 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     #@show dsp.block_ids
     #@show dsp.block_ids
     # send the block ids to Dsp
-    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}),
+    @dsp_ccall("setIntPtrParam", Nothing, (Ptr{Nothing}, Ptr{UInt8}, Cint, Ptr{Cint}),
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
 
@@ -183,7 +184,7 @@ function readSmps(dsp::DspModel, filename::AbstractString)
     # Check pointer to TssModel
     check_problem(dsp)
     # read smps files
-    @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
+    @dsp_ccall("readSmps", Nothing, (Ptr{Nothing}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
     # set block Ids
     setBlockIds(dsp, getNumScenarios(dsp))
 end
@@ -199,7 +200,7 @@ for func in [:freeSolver,
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void},), dsp.p)
+            return @dsp_ccall($strfunc, Nothing, (Ptr{Nothing},), dsp.p)
         end
     end
 end
@@ -208,7 +209,7 @@ for func in [:solveBdMpi, :solveDdMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
+            return @dsp_ccall($strfunc, Nothing, (Ptr{Nothing}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
         end
     end
 end
@@ -253,36 +254,36 @@ for (func,rtn) in [(:getNumScenarios, Cint),
     @eval begin
         function $func(dsp::DspModel)
             check_problem(dsp)
-            return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), dsp.p)
+            return @dsp_ccall($strfunc, $rtn, (Ptr{Nothing},), dsp.p)
         end
     end
 end
 getSolutionStatus(dsp::DspModel) = getStatus(dsp)
 function getNumRows(dsp::DspModel, num::Integer)
-    @dsp_ccall("getNumRows", Cint, (Ptr{Void}, Cint), dsp.p, num)
+    @dsp_ccall("getNumRows", Cint, (Ptr{Nothing}, Cint), dsp.p, num)
 end
 function getNumCols(dsp::DspModel, num::Integer)
-    @dsp_ccall("getNumCols", Cint, (Ptr{Void}, Cint), dsp.p, num)
+    @dsp_ccall("getNumCols", Cint, (Ptr{Nothing}, Cint), dsp.p, num)
 end
 
 function getObjCoef(dsp::DspModel)
     check_problem(dsp)
     num = getTotalNumCols()
     obj = Array{Cdouble}(num)
-    @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), dsp.p, obj)
+    @dsp_ccall("getObjCoef", Nothing, (Ptr{Nothing}, Ptr{Cdouble}), dsp.p, obj)
     return obj
 end
 
 function getSolution(dsp::DspModel, num::Integer)
     sol = Array{Cdouble}(num)
-    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    @dsp_ccall("getPrimalSolution", Nothing, (Ptr{Nothing}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
 function getDualSolution(dsp::DspModel, num::Integer)
     sol = Array{Cdouble}(num)
-    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    @dsp_ccall("getDualSolution", Nothing, (Ptr{Nothing}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getDualSolution(dsp::DspModel) = getDualSolution(dsp, getNumCouplingRows(dsp))

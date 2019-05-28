@@ -2,11 +2,9 @@
 module PlasmoDspInterface
 
 include("DspCInterface.jl")
-Pkg.installed("MPI") == nothing || using MPI
-#import .DspCInterface:DspModel,@dsp_ccall,check_problem
-#using .DspCInterface
+using MPI
 import .DspCInterface
-import ..PlasmoModelGraph
+import Plasmo.PlasmoModelGraph
 import JuMP
 
 export dsp_solve
@@ -124,9 +122,9 @@ function loadStochasticProblem(dsp::DspCInterface.DspModel, graph::PlasmoModelGr
     # @show nrows1
     # @show nrows2
 
-    DspCInterface.@dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, nscen))
-    DspCInterface.@dsp_ccall("setDimensions", Void,
-        (Ptr{Void}, Cint, Cint, Cint, Cint),
+    DspCInterface.@dsp_ccall("setNumberOfScenarios", Nothing, (Ptr{Nothing}, Cint), dsp.p, convert(Cint, nscen))
+    DspCInterface.@dsp_ccall("setDimensions", Nothing,
+        (Ptr{Nothing}, Cint, Cint, Cint, Cint),
         dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
 
     # get problem data
@@ -145,8 +143,8 @@ function loadStochasticProblem(dsp::DspCInterface.DspModel, graph::PlasmoModelGr
     # @show rubd
 
 
-    DspCInterface.@dsp_ccall("loadFirstStage", Void,
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+    DspCInterface.@dsp_ccall("loadFirstStage", Nothing,
+        (Ptr{Nothing}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
@@ -177,8 +175,8 @@ function loadStochasticProblem(dsp::DspCInterface.DspModel, graph::PlasmoModelGr
 
         #@show probability
 
-        DspCInterface.@dsp_ccall("loadSecondStage", Void,
-            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+        DspCInterface.@dsp_ccall("loadSecondStage", Nothing,
+            (Ptr{Nothing}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
@@ -191,8 +189,8 @@ function loadDeterministicProblem(dsp::DspCInterface.DspModel, model::JuMP.Model
     nrows = convert(Cint, length(model.linconstr))
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
     numels = length(index)
-    DspCInterface.@dsp_ccall("loadDeterministic", Void,
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
+    DspCInterface.@dsp_ccall("loadDeterministic", Nothing,
+        (Ptr{Nothing}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
 end
