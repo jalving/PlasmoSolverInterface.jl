@@ -81,7 +81,13 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     master_node = ModelNode()
 
     #Need to ensure this list is the same order on each CPU
-    submodels = reverse([getmodel(getnode(graph,i)) for i =1:length(getnodes(graph))])
+
+    submodels = [getmodel(getnode(graph,i)) for i = 1:length(getnodes(graph))]
+
+    modelvars = [JuMP.num_variables(m) for m in submodels]
+    model_order = reverse(sortperm(modelvars))
+    submodels = submodels[model_order]
+
 
     scen = length(submodels)
     #############################
