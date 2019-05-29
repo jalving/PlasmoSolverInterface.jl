@@ -8,12 +8,14 @@ using Distributed
 
 #import Plasmo: solve, AbstractPlasmoSolver
 
-export PipsSolver,pipsnlp_solve
+export PipsNlpSolver,pipsnlp_solve
 
 #include("solve.jl")
 
 include("PipsNlpInterface.jl")
 
 using .PipsNlpInterface
+
+include("solve.jl")
 
 end # module
