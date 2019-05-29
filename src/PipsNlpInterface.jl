@@ -79,7 +79,10 @@ function pipsnlp_solve(graph::ModelGraph) #Assume graph variables and constraint
     #NOTE: Assume no master model if not given a master index.  We will create a dummy model
     println("Solving with PIPS-NLP")
     master_node = ModelNode()
-    submodels = [getmodel(node) for node in getnodes(graph)]
+
+    #Need to ensure this list is the same order on each CPU
+    submodels = reverse([getmodel(getnode(graph,i)) for i =1:length(getnodes(graph))])
+
     scen = length(submodels)
     #############################
     master = getmodel(master_node)

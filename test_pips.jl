@@ -52,14 +52,14 @@ end
 #create a link constraint between the subproblems
 @linkconstraint(graph, (1/Ns)*sum(scen_models[s][:prod] for s in 1:Ns) == 8)
 
-ipopt_optimizer = with_optimizer(Ipopt.Optimizer)
-optimize!(graph,ipopt_optimizer)
-m = graph.jump_model
-ipopt_solution = JuMP.value.(JuMP.all_variables(m))
+# ipopt_optimizer = with_optimizer(Ipopt.Optimizer)
+# optimize!(graph,ipopt_optimizer)
+# m = graph.jump_model
+# ipopt_solution = JuMP.value.(JuMP.all_variables(m))
 
 pipsnlp_solve(graph)
-pips_solution  = vcat([getmodel(node).ext[:colVal] for node in getnodes(graph)]...)
-
-println(ipopt_solution - pips_solution) #NOTE: Should be almost zero
-
-#MPI.Finalize()
+#pips_solution  = vcat([getmodel(node).ext[:colVal] for node in getnodes(graph)]...)
+#
+# #println(sum(ipopt_solution - pips_solution)) #NOTE: Should be almost zero
+#
+# MPI.Finalize()
