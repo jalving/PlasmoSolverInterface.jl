@@ -272,8 +272,8 @@ function getDataFormat(master::JuMP.Model,child::JuMP.Model,linkcons::Vector{Pla
     mat = mat'
 
     # sparse description
-    start = convert(Vector{Cint}, mat.colptr - 1) #column
-    index = convert(Vector{Cint}, mat.rowval - 1) #row index
+    start = convert(Vector{Cint}, mat.colptr .- 1) #column
+    index = convert(Vector{Cint}, mat.rowval .- 1) #row index
     value = mat.nzval
 
     # column type
