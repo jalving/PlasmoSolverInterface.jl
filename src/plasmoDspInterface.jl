@@ -250,7 +250,7 @@ function getDataFormat(model::JuMP.Model)
             ctype = ctype * "C";
         end
     end
-    ctype = convert(Vector{UInt8}, ctype)
+    ctype = unsafe_wrap(Vector{UInt8}, ctype)
 
     # objective coefficients
     obj = JuMP.prepAffObjective(model)
