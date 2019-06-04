@@ -231,11 +231,12 @@ function getDataFormat(model::JuMP.Model)
     # Column wise sparse matrix
     mat = JuMP.prepConstrMatrix(model)
     # Tranpose; now I have row-wise sparse matrix
-    mat = sparse(Matrix(mat'))
+    #mat = sparse(Matrix(mat'))
+    mat = permutedims(mat)
 
     # sparse description
-    start = convert(Vector{Cint}, mat.colptr - 1) #column
-    index = convert(Vector{Cint}, mat.rowval - 1) #row index
+    start = convert(Vector{Cint}, mat.colptr .- 1) #column
+    index = convert(Vector{Cint}, mat.rowval .- 1) #row index
     value = mat.nzval
 
     # column type
