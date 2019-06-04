@@ -75,11 +75,12 @@ mutable struct DspModel
         # create DspModel
         dsp = new(p, nblocks, solve_type, numRows, numCols, primVal, dualVal, colVal, rowVal, comm, comm_size, comm_rank, block_ids)
         # with finalizer
-        finalizer(dsp, freeDSP)
+        finalizer(freeDSP,dsp)
         # return DspModel
         return dsp
     end
 end
+
 
 function freeDSP(dsp::DspModel)
     if dsp.p == C_NULL
