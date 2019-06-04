@@ -27,10 +27,10 @@ function dsp_solve(graph::PlasmoModelGraph.ModelGraph,master_node::PlasmoModelGr
             if optval in [:Dual, :Benders, :Extensive]
                 dspmodel.solve_type = optval
             else
-                warn("solve_type $optval is not available.")
+                @warn("solve_type $optval is not available.")
             end
         else
-            warn("Options $optname is not available.")
+            @warn("Options $optname is not available.")
         end
     end
 
@@ -60,7 +60,7 @@ function dsp_solve(graph::PlasmoModelGraph.ModelGraph,master_node::PlasmoModelGr
     master.colVal = fill(NaN, dspmodel.numCols)
 
     if stat != :Optimal
-        suppress_warnings || warn("Not solved to optimality, status: $stat")
+        suppress_warnings || @warn("Not solved to optimality, status: $stat")
     end
 
     if !(stat == :Infeasible || stat == :Unbounded)
@@ -81,7 +81,7 @@ function loadProblem(dsp::DspCInterface.DspModel,graph::PlasmoModelGraph.ModelGr
         #loadStochasticProblem(dsp, graph, master,subproblems, dedicatedMaster,probabilities = Dict(zip(1:length(subproblems),fill(1.0,length(subproblems)))))
 
     else #Do I even need to support this?
-        warn("No blocks were defined.")
+        @warn("No blocks were defined.")
         loadDeterministicProblem(dsp, master)
     end
 end
@@ -356,7 +356,7 @@ function parseStatusCode(statcode::Integer)
         stat = :Error
     else
         stat = :Unknown
-        warn("Unknown status: $statcode")
+        @warn("Unknown status: $statcode")
     end
 
     stat

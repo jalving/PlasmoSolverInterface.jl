@@ -297,7 +297,7 @@ function setSolverType(dsp::DspModel, solver)
     if solver in solver_types
         dsp.solver = solver
     else
-        warn("Solver type $solver is invalid.")
+        @warn("Solver type $solver is invalid.")
     end
 end
 
