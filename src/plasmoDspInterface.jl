@@ -230,7 +230,7 @@ function getDataFormat(model::JuMP.Model)
     # Column wise sparse matrix
     mat = JuMP.prepConstrMatrix(model)
     # Tranpose; now I have row-wise sparse matrix
-    mat = mat'
+    mat = sparse(Matrix(mat'))
 
     # sparse description
     start = convert(Vector{Cint}, mat.colptr - 1) #column
