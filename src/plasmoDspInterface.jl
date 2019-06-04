@@ -3,6 +3,7 @@ module PlasmoDspInterface
 
 include("DspCInterface.jl")
 using MPI
+using SparseArrays
 import .DspCInterface
 import Plasmo.PlasmoModelGraph
 import JuMP
