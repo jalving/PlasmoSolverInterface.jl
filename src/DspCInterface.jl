@@ -146,7 +146,7 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     #@show dsp.block_ids
     # send the block ids to Dsp
     @dsp_ccall("setIntPtrParam", Nothing, (Ptr{Nothing}, Ptr{UInt8}, Cint, Ptr{Cint}),
-        dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
+        dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids .- 1))
 end
 
 function getBlockIds(dsp::DspModel)
