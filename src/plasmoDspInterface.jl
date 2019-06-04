@@ -269,7 +269,7 @@ function getDataFormat(master::JuMP.Model,child::JuMP.Model,linkcons::Vector{Pla
     # Column wise sparse matrix
     mat = prepChildConstrMatrix(master,child,linkcons)
     # Tranpose; now I have row-wise sparse matrix
-    mat = mat'
+    mat = permutedims(mat)
 
     # sparse description
     start = convert(Vector{Cint}, mat.colptr .- 1) #column
