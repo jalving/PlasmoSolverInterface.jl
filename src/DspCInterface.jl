@@ -270,20 +270,20 @@ end
 function getObjCoef(dsp::DspModel)
     check_problem(dsp)
     num = getTotalNumCols()
-    obj = Array{Cdouble}(num)
+    obj = Array{Cdouble}(undef,num)
     @dsp_ccall("getObjCoef", Nothing, (Ptr{Nothing}, Ptr{Cdouble}), dsp.p, obj)
     return obj
 end
 
 function getSolution(dsp::DspModel, num::Integer)
-    sol = Array{Cdouble}(num)
+    sol = Array{Cdouble}(undef,num)
     @dsp_ccall("getPrimalSolution", Nothing, (Ptr{Nothing}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
 function getDualSolution(dsp::DspModel, num::Integer)
-    sol = Array{Cdouble}(num)
+    sol = Array{Cdouble}(undef,num)
     @dsp_ccall("getDualSolution", Nothing, (Ptr{Nothing}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
