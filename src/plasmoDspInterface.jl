@@ -295,8 +295,8 @@ function getDataFormat(master::JuMP.Model,child::JuMP.Model,linkcons::Vector{Pla
     linconstr = child.linconstr
     allconstr = [linconstr;linkcons]
 
-    child_linear_lb = Array{Float64}(0)
-    child_linear_ub = Array{Float64}(0)
+    child_linear_lb = Array{Float64}(undef,0)
+    child_linear_ub = Array{Float64}(undef,0)
 
     #rlbd, rubd = JuMP.prepConstrBounds(model)
     for con in allconstr
